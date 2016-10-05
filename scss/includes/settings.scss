@@ -1,0 +1,37 @@
+.settings {
+	.bar-header {
+		border-bottom: 1px solid $bar-border-subtle;
+	}
+	.error {
+		color: #ff0000;
+		font-size: 75%;
+	}
+	ion-option-button {
+		.button-clear {
+			max-height: none;
+		}
+	}
+	.servers {
+		.item-icon-right .icon {
+			right: 0;
+		}
+	}
+
+	.item {
+		p {
+			color: black;
+			opacity: 1;
+			font-size: $font-size-large;
+			padding-top: 10px;
+			padding-bottom: 10px;
+		}
+		ol, ul {
+			padding-left: 20px;
+			list-style: disc outside none;
+			li {
+				color: black;
+				opacity: 1;
+			}
+		}
+	}
+}

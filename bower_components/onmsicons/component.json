@@ -1,0 +1,19 @@
+{
+    "repo": "driftyco/onmsicons",
+    "development": {},
+    "version": "1.0.0",
+    "styles": [
+        "css/onmsicons.css"
+    ],
+    "name": "onmsicons",
+    "dependencies": {},
+    "keywords": [],
+    "license": "MIT",
+    "fonts": [
+        "fonts/onmsicons.eot",
+        "fonts/onmsicons.svg",
+        "fonts/onmsicons.ttf",
+        "fonts/onmsicons.woff"
+    ],
+    "description": "The premium icon font for Ionic Framework."
+}

@@ -1,0 +1,31 @@
+{
+  "name": "cordova-plugin-keychain",
+  "version": "2.0.4-dev",
+  "description": "Cordova Keychain Plugin",
+  "cordova": {
+    "id": "cordova-plugin-keychain",
+    "platforms": [
+      "android",
+      "ios"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RangerRick/KeychainPlugin"
+  },
+  "keywords": [
+    "cordova",
+    "keychain",
+    "ecosystem:cordova",
+    "cordova-android",
+    "cordova-ios"
+  ],
+  "engines": [
+    {
+      "name": "cordova",
+      "version": ">=3.0.0"
+    }
+  ],
+  "author": "Various",
+  "license": "Apache 2.0"
+}

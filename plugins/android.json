@@ -1,0 +1,87 @@
+{
+    "prepare_queue": {
+        "installed": [],
+        "uninstalled": []
+    },
+    "config_munge": {
+        "files": {}
+    },
+    "installed_plugins": {
+        "com.bez4pieci.cookies": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "com.raccoonfink.cordova.plugins.certificates": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "com.raccoonfink.cordova.plugins.http": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-chrome-apps-system-memory": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-console": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-crosswalk-webview": {
+            "XWALK_VERSION": "21+",
+            "XWALK_LITEVERSION": "xwalk_core_library_canary:17+",
+            "XWALK_COMMANDLINE": "--disable-pull-to-refresh-effect",
+            "XWALK_MODE": "embedded",
+            "XWALK_MULTIPLEAPK": "true",
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-datepicker": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-extension": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-file": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-geolocation": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-google-analytics": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-inappbrowser": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-json-storage": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-network-information": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-screen-orientation": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-splashscreen": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-sqlite-2": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-statusbar": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-whitelist": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-wkwebview-engine": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "ionic-plugin-keyboard": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        }
+    },
+    "dependent_plugins": {
+        "cordova-plugin-compat": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        },
+        "cordova-plugin-keychain": {
+            "PACKAGE_NAME": "com.opennms.compass.scc.alpha"
+        }
+    }
+}

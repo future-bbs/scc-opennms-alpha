@@ -1,0 +1,9 @@
+// Onmsicons Icons
+// --------------------------
+
+.onmsicons,
+.#{$onmsicons-prefix}grabber:before
+{
+  @extend .ion;
+}
+.#{$onmsicons-prefix}grabber:before { content: $ionicon-var-grabber; }

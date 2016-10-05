@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin xmlns="http://www.phonegap.com/ns/plugins/1.0"
+  xmlns:android="http://schemas.android.com/apk/res/android"
+  id="cordova-plugin-json-storage"
+  version="0.1.0-dev">
+
+    <name>Cordova JSON Storage Plugin</name>
+    <description>Cloud-capable JSON data store.</description>
+
+    <engines>
+        <engine name="cordova" version=">=3.0.0" />
+    </engines>
+
+    <js-module src="www/json-storage.js" name="JSONStorage">
+        <clobbers target="JSONStorage" />
+        <clobbers target="window.plugins.JSONStorage" />
+    </js-module>
+
+    <dependency id="cordova-plugin-inappbrowser" url="https://github.com/apache/cordova-plugin-inappbrowser.git" />
+    <dependency id="cordova-plugin-keychain" url="https://github.com/RangerRick/KeychainPlugin.git" />
+
+    <!-- browser -->
+    <platform name="browser">
+    </platform>
+
+    <!-- ios -->
+    <platform name="ios">
+        <config-file target="config.xml" parent="/*">
+            <feature name="LocalJSONStorage">
+                <param name="ios-package" value="ONMSJSONStorage"/>
+            </feature>
+        </config-file>
+
+        <header-file src="src/ios/ONMSJSONStorage.h" />
+        <source-file src="src/ios/ONMSJSONStorage.m" />
+        
+        <!--<framework custom="true" src="lib/ios/DropboxSDK.framework"/>-->
+        <framework src="QuartzCore.framework" />
+        <framework src="Security.framework" />
+    </platform>
+
+    <!--android -->
+    <platform name="android">
+        <config-file target="res/xml/config.xml" parent="/*">
+            <feature name="LocalJSONStorage">
+                <param name="android-package" value="org.opennms.cordova.storage.LocalStoragePlugin"/>
+            </feature>
+        </config-file>
+
+        <source-file src="src/android/org/opennms/cordova/storage/LocalStoragePlugin.java" target-dir="src/org/opennms/cordova/storage/" />
+        <source-file src="src/android/org/opennms/cordova/storage/JSONStorageResult.java" target-dir="src/org/opennms/cordova/storage/" />
+
+        <!--<source-file src="lib/android/dropbox-android-sdk-1.6.3.jar" target-dir="libs"/>-->
+        <source-file src="lib/android/json_simple-1.1.jar" target-dir="libs"/>
+    </platform>
+</plugin>

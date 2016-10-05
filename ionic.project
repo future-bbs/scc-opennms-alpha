@@ -1,0 +1,16 @@
+{
+  "name": "OpenNMS Compass",
+  "app_id": "bf988c24",
+  "gulpStartupTasks": [],
+  "watchPatterns": [
+    "www/**/*",
+    "!www/lib/**/*"
+  ],
+  "browsers": [
+    {
+      "platform": "android",
+      "browser": "crosswalk",
+      "version": "12.41.296.5"
+    }
+  ]
+}

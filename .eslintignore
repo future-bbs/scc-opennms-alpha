@@ -1,0 +1,19 @@
+gulpfile.js
+
+bin/
+bower_components/
+couchdb/
+engine/
+generated/
+hooks/
+node_modules/
+platforms/
+plugins/
+temp/
+
+src/3rdparty/
+www/
+
+# for now
+test/
+spec/

@@ -1,0 +1,7 @@
+{
+"version": 3,
+"mappings": ";;;;;;AAGA,UASC,GARA,WAAW,ECAY,WAAW,EDClC,GAAG,EAAC,qCAAoE,EACxE,GAAG,EAAC,uPAGyF,EAC7F,WAAW,EAAE,MAAM,EACnB,UAAU,EAAE,MAAM;AAGnB,sCAAK,GACH,OAAO,EAAE,YAAY,EACrB,WAAW,ECZW,WAAW,EDajC,KAAK,EAAE,IAAI,EACX,UAAU,EAAE,MAAM,EAClB,WAAW,EAAE,MAAM,EACnB,YAAY,EAAE,MAAM,EACpB,cAAc,EAAE,IAAI,EACpB,cAAc,EAAE,IAAI,EACpB,WAAW,EAAE,CAAC,EACd,sBAAsB,EAAE,WAAW,EACnC,uBAAuB,EAAE,SAAS;;AEjBpC,oBAAoC,GAAE,OAAO,EDAvB,GAAO",
+"sources": ["../scss/_onmsicons-font.scss","../scss/_onmsicons-variables.scss","../scss/_onmsicons-icons.scss"],
+"names": [],
+"file": "onmsicons.css"
+}

@@ -1,0 +1,1 @@
+Cordova JSON Storage Plugin

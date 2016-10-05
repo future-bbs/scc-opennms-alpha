@@ -1,0 +1,174 @@
+$server-title-height: 34px;
+
+$arrow-top-offset: 60px;
+$arrow-touch-padding: 20px;
+$arrow-edge-padding: 6px;
+
+$shadow-color: rgba(0,0,0,0.3);
+
+.dashboard {
+	.nav-bar-title {
+		img {
+			padding-top: 3px;
+		}
+	}
+	.donut-title {
+		z-index: $z-index-view-above;
+		margin-top: -($font-size-large * 1.6);
+		font-size: $font-size-large * 2;
+		left:0;
+		width: 100%;
+		color: black;
+		.type {
+			font-size: $font-size-base;
+		}
+	}
+	.donut-title {
+		top: 50%;
+		position: absolute;
+	}
+	.donut-overlay {
+		position: absolute;
+		width: 100%;
+		height: 100%;
+		top: 0;
+		left: 0;
+		z-index: $z-index-view-above + 1;
+	}
+	.wide .donut-overlay {
+		width: 50%;
+	}
+	.wide .outages .donut-overlay {
+		left: 50%;
+	}
+	.wide .alarms .donut-overlay {
+		left: 0;
+	}
+	.spinner-container {
+		padding: 50px;
+	}
+	flot {
+		border: 0;
+		> div {
+			border: 0;
+		}
+		.flot-base, .flot-overlay {
+			border: 0;
+		}
+	}
+	.wide .donut-title {
+		top: -50%;
+		position: relative;
+	}
+	.wide flot {
+		display: table;
+		margin: 0 auto;
+	}
+	.nav-bar-title img {
+		vertical-align: baseline;
+		margin: 4px;
+	}
+	.bar-subheader {
+		border-bottom: 1px solid $bar-border-subtle;
+	}
+	h3.title {
+		text-align: center !important;
+		margin-top: 0;
+		font-size: $font-size-base;
+	}
+	.error {
+		color: red;
+	}
+	ion-item.outages.item {
+		border: none;
+		padding: 0;
+	}
+	.alarms.col, .outages.col {
+		padding: 0;
+		margin: 0;
+	}
+	.alarms {
+		text-align: center;
+	}
+	.outages {
+		text-align: center;
+	}
+	.labelContents {
+		text-align: center;
+		padding: 2px;
+		color: white;
+		text-shadow:
+			-1px -1px $shadow-color,
+			1px -1px $shadow-color,
+			1px 1px $shadow-color,
+			-1px 1px $shadow-color;
+	}
+	.availability {
+		.header {
+			background-color: #666;
+			color: white;
+		}
+		.noright {
+			padding-right: 0;
+		}
+		.nobottom {
+			padding-bottom: 0;
+		}
+	}
+	.graphs {
+		h4.label {
+			text-align: center;
+			width: 100%;
+			button {
+				float: right;
+			}
+		}
+	}
+	.left-arrow {
+		position: absolute;
+		left: 0;
+		bottom: 0;
+		z-index: $z-index-view-above + 2;
+		padding-top: $arrow-touch-padding;
+		padding-left: $arrow-edge-padding;
+		padding-right: $arrow-touch-padding;
+		padding-bottom: $arrow-touch-padding;
+		font-size: ($arrow-touch-padding * 2);
+		line-height: ($arrow-touch-padding * 2);
+	}
+	.right-arrow {
+		position: absolute;
+		right: 0;
+		bottom: 0;
+		z-index: $z-index-view-above + 2;
+		padding-top: $arrow-touch-padding;
+		padding-left: $arrow-touch-padding;
+		padding-right: $arrow-edge-padding;
+		padding-bottom: $arrow-touch-padding;
+		font-size: ($arrow-touch-padding * 2);
+		line-height: ($arrow-touch-padding * 2);
+	}
+	.settings-button {
+		position: fixed;
+		padding-right: 0;
+		top: $bar-height;
+		right: 0;
+		z-index: $z-index-menu-bar-header + 1;
+		text-shadow:
+			-1px 0 white,
+			0 1px white,
+			1px 0 white,
+			0 -1px white,
+			0 0 8px white;
+	}
+}
+
+.platform-ios.platform-cordova {
+	&:not(.fullscreen) {
+		.dashboard {
+			.settings-button {
+				top: $bar-height + $ios-statusbar-height;
+			}
+		}
+	}
+}

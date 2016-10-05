@@ -1,0 +1,32 @@
+{
+  "name": "version_compare",
+  "main": "version_compare.js",
+  "version": "0.0.3",
+  "homepage": "https://github.com/gabe0x02/version_compare",
+  "authors": [
+    "Gabriel Littman (https://github.com/gabe0x02)",
+    "Jon (http://stackoverflow.com/users/50079/jon)"
+  ],
+  "description": "Compare version strings.\"",
+  "keywords": [
+    "verison",
+    "compare"
+  ],
+  "license": "CC-BY-SA",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "_release": "0.0.3",
+  "_resolution": {
+    "type": "version",
+    "tag": "v0.0.3",
+    "commit": "44519317677363c450148f842cd7f4145baf4bdd"
+  },
+  "_source": "git://github.com/gabe0x02/version_compare.git",
+  "_target": "~0.0.3",
+  "_originalSource": "version_compare"
+}

@@ -1,0 +1,36 @@
+{
+  "ignore": [
+    "**/.*",
+    "builder",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "name": "onmsicons",
+  "license": "MIT",
+  "authors": [
+    "Benjamin Reed <ranger@opennms.org>"
+  ],
+  "keywords": [
+    "fonts",
+    "icon font",
+    "icons",
+    "web font"
+  ],
+  "main": [
+    "css/onmsicons.css",
+    "fonts/*"
+  ],
+  "homepage": "https://github.com/OpenNMS/onmsicons",
+  "description": "Onmsicons",
+  "_release": "6a7afe4939",
+  "_resolution": {
+    "type": "branch",
+    "branch": "master",
+    "commit": "6a7afe4939f5d7f364fa8a228f470e5418d93b50"
+  },
+  "_source": "https://github.com/OpenNMS/onmsicons.git",
+  "_target": "*",
+  "_originalSource": "https://github.com/OpenNMS/onmsicons.git"
+}

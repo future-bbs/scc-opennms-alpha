@@ -1,0 +1,27 @@
+// Onmsicons Font Path
+// --------------------------
+
+@font-face {
+ font-family: $onmsicons-font-family;
+ src:url("#{$onmsicons-font-path}/onmsicons.eot?v=#{$onmsicons-version}");
+ src:url("#{$onmsicons-font-path}/onmsicons.eot?v=#{$onmsicons-version}#iefix") format("embedded-opentype"),
+  url("#{$onmsicons-font-path}/onmsicons.ttf?v=#{$onmsicons-version}") format("truetype"),
+  url("#{$onmsicons-font-path}/onmsicons.woff?v=#{$onmsicons-version}") format("woff"),
+  url("#{$onmsicons-font-path}/onmsicons.svg?v=#{$onmsicons-version}#Onmsicons") format("svg");
+ font-weight: normal;
+ font-style: normal;
+}
+
+.ion {
+  display: inline-block;
+  font-family: $onmsicons-font-family;
+  speak: none;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  text-rendering: auto;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

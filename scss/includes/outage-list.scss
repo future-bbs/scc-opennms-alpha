@@ -1,0 +1,35 @@
+.outage-list {
+	.error {
+		color: red;
+	}
+
+	.item {
+		border-top: 0;
+		border-bottom: 0;
+
+		.row {
+			padding: 0;
+			.col {
+				padding: 0;
+			}
+		}
+	}
+	.item-divider {
+		background-color: #555;
+		h2 {
+			color: white;
+		}
+		font-weight: bolder;
+		/* border-top: 1px solid #333; */
+	}
+	.service-name {
+		font-size: smaller;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		/*
+		direction: rtl;
+		text-align: right;
+		*/
+	}
+}

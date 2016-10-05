@@ -1,0 +1,59 @@
+<ion-view class="dashboard">
+	<ion-nav-bar class="bar-light" align-title="center">
+		<ion-nav-buttons side="left">
+			<a class="button button-icon button-compass button-clear ion-ios-alarm-outline" nav-direction="back" ui-sref="alarms"></a>
+		</ion-nav-buttons>
+		<ion-nav-title><img class="logo" ng-src="{{logo}}"></ion-nav-title>
+		<ion-nav-buttons side="right">
+			<a class="button button-icon button-compass button-clear ion-monitor" nav-direction="forward" ui-sref="nodes"></a>
+		</ion-nav-buttons>
+	</ion-nav-bar>
+	<ion-header-bar class="bar bar-header bar-subheader">
+		<h3 class="title compass" ng-click="showSelectServer($event)">
+			<span ng-if="server">{{server.name}} <i class="icon ion-arrow-down-b"></i></span>
+		</h3>
+	</ion-header-bar>
+	<ion-content padding="false" scroll="true" class="has-header" overflow-scroll="false">
+		<ion-refresher pulling-text="Pull to Refresh..." on-refresh="refreshData()"></ion-refresher>
+		<div class="header"><h3 class="title compass" ng-if="server === null" style="padding-top: 10px">No server configured.</h3></div>
+
+		<ion-slide-box on-slide-changed="refreshDonutSlide(index)" show-pager="false" delegate-handle="donut-slide-box" ng-if="!wide" class="portrait">
+			<ion-slide class="alarms" ng-style="{width: donutSize, height: donutSize}">
+				<div class="donut-overlay" ng-click="goToAlarms()"></div>
+				<i id="alarm-arrow" class="icon ion-chevron-right right-arrow compass" ng-click="goToDonutSlide(1)" ng-class="donutClass('alarms')"></i>
+				<h3 ng-if="e.hasError('dashboard-alarms')" class="item item-text-wrap title error">Error: Unable to retrieve alarm data.<span ng-if="e.get('dashboard-alarms').permissionDenied()"><br/>Permission denied.</span></h3>
+				<flot dataset="donuts.alarms.data" options="donuts.alarms.options" ng-if="donutVisible('alarms')" ng-attr-width="{{donutSize}}" ng-attr-height="{{donutSize}}"></flot>
+				<!-- <div class="spinner-container" ng-if="isRefreshing('alarms')"><ion-spinner></ion-spinner></div> -->
+				<div class="donut-title"></div>
+			</ion-slide>
+			<ion-slide class="outages" ng-style="{width: donutSize, height: donutSize}">
+				<div class="donut-overlay" ng-click="modals.outages()"></div>
+				<i id="outage-arrow" class="icon ion-chevron-left left-arrow compass" ng-click="goToDonutSlide(0)" ng-class="donutClass('outages')"></i>
+				<h3 ng-if="e.hasError('dashboard-outages')" class="item item-text-wrap title error">Error: Unable to retrieve outages.<span ng-if="e.get('dashboard-outages').permissionDenied()"><br/>Permission denied.</span></h3>
+				<flot dataset="donuts.outages.data" options="donuts.outages.options" ng-if="donutVisible('outages')" ng-attr-width="{{donutSize}}" ng-attr-height="{{donutSize}}"></flot>
+				<!-- <div class="spinner-container" ng-if="isRefreshing('outages')"><ion-spinner></ion-spinner></div> -->
+				<div class="donut-title"></div>
+			</ion-slide>
+		</ion-slide-box>
+		<div class="row wide" ng-if="wide">
+			<div class="alarms col col-50" ng-style="{width: donutSize, height: donutSize}">
+				<div class="donut-overlay" ng-click="goToAlarms()"></div>
+				<h3 ng-if="e.hasError('dashboard-alarms')" class="item item-text-wrap title error">Error: Unable to retrieve alarm data.<span ng-if="e.get('dashboard-alarms').permissionDenied()"><br/>Permission denied.</span></h3>
+				<flot dataset="donuts.alarms.data" options="donuts.alarms.options" ng-if="donutVisible('alarms')" ng-attr-width="{{donutSize}}" ng-attr-height="{{donutSize}}"></flot>
+				<!-- <div class="spinner-container" ng-if="isRefreshing('outages')"><ion-spinner></ion-spinner></div> -->
+				<div class="donut-title"></div>
+			</div>
+			<div class="outages col col-50" ng-style="{width: donutSize, height: donutSize}">
+				<div class="donut-overlay" ng-click="modals.outages()"></div>
+				<h3 ng-if="e.hasError('dashboard-outages')" class="item item-text-wrap title error">Error: Unable to retrieve outages.<span ng-if="e.get('dashboard-outages').permissionDenied()"><br/>Permission denied.</span></h3>
+				<flot dataset="donuts.outages.data" options="donuts.outages.options" ng-if="donutVisible('outages')" ng-attr-width="{{donutSize}}" ng-attr-height="{{donutSize}}"></flot>
+				<!-- <div class="spinner-container" ng-if="isRefreshing('outages')"><ion-spinner></ion-spinner></div> -->
+				<div class="donut-title"></div>
+			</div>
+		</div>
+
+		<ng-include src="favoriteGraphsTemplate" ng-if="supportsGraphs &amp;&amp; favoriteGraphs &amp;&amp; favoriteGraphs.length > 0"></ng-include>
+		<ng-include src="availabilityTemplate" ng-if="availability &amp;&amp; availability.length > 0"></ng-include>
+	</ion-content>
+	<button class="button button-compass button-clear settings-button" ng-click="modals.settings()"><i class="icon ion-gear-a"></i></button>
+</ion-view>

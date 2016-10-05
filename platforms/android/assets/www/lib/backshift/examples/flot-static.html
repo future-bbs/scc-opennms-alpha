@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<head>
+    <link rel="stylesheet" type="text/css" href="../bower_components/c3/c3.min.css">
+
+    <script src="../bower_components/jquery/dist/jquery.min.js"></script>
+    <script src="../bower_components/d3/d3.min.js"></script>
+
+    <script src="../bower_components/flot/jquery.flot.js"></script>
+    <script src="../bower_components/flot/jquery.flot.time.js"></script>
+    <script src="../bower_components/flot/jquery.flot.canvas.js"></script>
+    <script src="../bower_components/flot-legend/jquery.flot.legend.js"></script>
+    <script src="../bower_components/flot-axislabels/jquery.flot.axislabels.js"></script>
+    <script src="../bower_components/flot.tooltip/js/jquery.flot.tooltip.min.js"></script>
+    <script src="../bower_components/flot-saveas/jquery.flot.saveas.js"></script>
+    <script src="../bower_components/flot-datatable/jquery.flot.datatable.js"></script>
+    <script src="../bower_components/flot-navigate/jquery.flot.navigate.js"></script>
+
+    <script src="../src/Compat.js"></script>
+    <script src="../src/Backshift.js"></script>
+    <script src="../src/Backshift.Class.js"></script>
+    <script src="../src/Backshift.Class.Configurable.js"></script>
+    <script src="../src/Backshift.Math.js"></script>
+    <script src="../src/Backshift.Stats.js"></script>
+    <script src="../src/Backshift.Utilities.Url.js"></script>
+    <script src="../src/Backshift.DataSource.js"></script>
+    <script src="../src/Backshift.DataSource.SineWave.js"></script>
+    <script src="../src/Backshift.Graph.js"></script>
+    <script src="../src/Backshift.Graph.Flot.js"></script>
+    <script src="../src/Backshift.Graph.Matrix.js"></script>
+</head>
+
+<body>
+
+<div id="chart-graph"></div>
+
+<script type="text/javascript">
+    var ds = new Backshift.DataSource.SineWave({
+        metrics: [
+            {
+                name: "wave1",
+                amplitude: 5,
+                hshift: 5,
+                period: 32 * Math.PI * 60
+            },
+            {
+                name: "wave2",
+                amplitude: 2.5,
+                hshift: 1000,
+                period: 16 * Math.PI * 60
+            }
+        ]
+    });
+
+    var flotGraph = new Backshift.Graph.Flot({
+        element: document.querySelector("#chart-graph"),
+        start: 0,
+        end: 10000,
+        dataSource: ds,
+        width: 640,
+        height: 480,
+        title: "Wave",
+        verticalLabel: "Voltage",
+        model: {
+            series: [
+                {
+                    name: "Source #1",
+                    metric: "wave1",
+                    type: "line",
+                    color: "#0000ff"
+                },
+                {
+                    name: "Source #2",
+                    metric: "wave2",
+                    type: "line",
+                    color: "#ff0000"
+                }
+            ],
+            printStatements: [
+                {
+                    metric: 'wave1',
+                    value: '%g Source #1 '
+                },
+                {
+                    metric: 'wave1',
+                    aggregation: 'AVERAGE',
+                    value: 'Avg: %8.2lf %s'
+                },
+                {
+                    metric: 'wave1',
+                    aggregation: 'MIN',
+                    value: 'Min: %8.2lf %s'
+                },
+                {
+                    metric: 'wave1',
+                    aggregation: 'MAX',
+                    value: 'Max: %8.2lf %s'
+                },
+                {
+                    metric: 'wave1',
+                    aggregation: 'LAST',
+                    value: 'Last: %8.2lf %s \\n'
+                },
+                {
+                    metric: 'wave2',
+                    value: '%g Source #2 '
+                },
+                {
+                    metric: 'wave2',
+                    aggregation: 'AVERAGE',
+                    value: 'Avg: %8.2lf %s'
+                },
+                {
+                    metric: 'wave2',
+                    aggregation: 'MIN',
+                    value: 'Min: %8.2lf %s'
+                },
+                {
+                    metric: 'wave2',
+                    aggregation: 'MAX',
+                    value: 'Max: %8.2lf %s'
+                },
+                {
+                    metric: 'wave2',
+                    aggregation: 'LAST',
+                    value: 'Last: %8.2lf %s'
+                }
+            ],
+        },
+    });
+
+    flotGraph.render();
+</script>
+</body>

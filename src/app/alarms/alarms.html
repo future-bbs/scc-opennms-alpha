@@ -1,0 +1,34 @@
+<ion-view class="alarms">
+	<div class="refresher" ng-if="refreshing.alarms || refreshing.alarmSeverities"><ion-spinner class="spinner-compass"></ion-spinner></div>
+	<ion-nav-bar class="bar-light" align-title="center">
+		<ion-nav-buttons side="left">
+			<button ng-if="modal" class="button button-compass button-clear" ng-click="modal.show()"><i class="icon ion-ios-settings"></i> Filter</button>
+		</ion-nav-buttons>
+		<ion-nav-title ng-click="titleClicked()"><i class="icon ion-ios-search-strong"></i> Alarms</ion-nav-title>
+		<ion-nav-buttons side="right">
+			<button class="button button-compass button-clear" ng-click="backToDashboard()">Dash <i class="icon ion-ios-arrow-right"></i></button>
+		</ion-nav-buttons>
+	</ion-nav-bar>
+	<ion-header-bar class="bar bar-subheader legend row box" ng-if="legend.length &gt; 0">
+		<div ng-class="'col severity-' + item.severity + ' ' + (severities[item.severity]? 'enabled':'disabled')" ng-repeat="item in legend track by item.severity" ng-click="toggleSeverity(item)"><i ng-class="'icon severity severity-' + item.severity + ' ' + util.icon(item.severity)"></i> {{item.count}}</div>
+	</ion-header-bar>
+	<ion-content delegate-handle="alarms-scroll" ng-class="legend.length &gt; 0? 'has-subheader':''">
+		<ion-refresher pulling-text="Pull to Refresh..." on-refresh="refreshImmediately()"></ion-refresher>
+		<ion-list can-swipe="canAck()">
+			<ion-item ng-if="alarms &amp;&amp; alarms.length === 0 &amp;&amp; !error &amp;&amp; !refreshing.alarms">
+				No {{filter.showAcknowledged? 'matching':'unacknowledged'}} alarms found.
+			</ion-item>
+			<ion-item ng-class="'item-text-wrap error'" ng-if="error">
+				An error occurred retrieving alarm data.
+				<span ng-if="error.permissionDenied()">
+					Permission denied.
+				</span>
+			</ion-item>
+			<!-- collection-item-height="120" -->
+			<span ng-repeat="alarm in alarms | severity track by alarm.hash">
+				<onms-alarm alarm="alarm"></onms-alarm>
+			</span>
+		</ion-list>
+		<!-- <ion-infinite-scroll on-infinite="getAlarms()" ng-if="canLoadMore()"></ion-infinite-scroll> -->
+	</ion-content>
+</ion-view>

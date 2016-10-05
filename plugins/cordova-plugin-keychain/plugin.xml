@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
+    id="cordova-plugin-keychain"
+    version="2.0.4-dev">
+
+    <name>KeyChain Plugin for Cordova</name>
+    <description>This plugin allows keychain access for your Cordova project.</description>
+    <license>Apache 2.0</license>
+    <keywords>keychain</keywords>	
+    
+    <engines>
+        <engine name="cordova" version=">=3.0.0" />
+    </engines>
+	
+    <js-module src="www/keychain.js" name="CordovaKeychain">
+        <clobbers target="CordovaKeychain" />
+    </js-module>
+	
+    <!-- ios -->
+    <platform name="ios">
+        <!-- feature tag in config.xml -->
+        <config-file target="config.xml" parent="/widget">
+          <feature name="CordovaKeychain">
+            <param name="ios-package" value="CDVKeychain"/>
+            <param name="onload" value="true"/>
+          </feature>
+        </config-file>
+        
+        <header-file src="src/ios/CDVKeychain.h" />
+        <header-file src="src/ios/SFHFKeychainUtils/SFHFKeychainUtils.h"/>
+        <header-file src="src/ios/UICKeyChainStore/UICKeyChainStore.h"/>
+        
+        <source-file src="src/ios/CDVKeychain.m"/>
+        <source-file src="src/ios/SFHFKeychainUtils/SFHFKeychainUtils.m" compiler-flags="-fobjc-arc" />
+        <source-file src="src/ios/UICKeyChainStore/UICKeyChainStore.m" compiler-flags="-fobjc-arc" />
+        
+        <framework src="Security.framework" />
+        
+    </platform>
+    <platform name="android">
+        <config-file target="res/xml/config.xml" parent="/*">
+            <feature name="CordovaKeychain">
+                <param name="android-package" value="com.synconset.KeychainPlugin"/>
+                <param name="onload" value="true"/>
+            </feature>
+        </config-file>
+
+        <source-file src="src/android/KeychainPlugin.java" target-dir="src/com/synconset" />
+    </platform>
+</plugin>

@@ -1,0 +1,28 @@
+{
+    "ignore": [
+        "**/.*",
+        "builder",
+        "node_modules",
+        "bower_components",
+        "test",
+        "tests"
+    ],
+    "version": "1.0.0",
+    "name": "onmsicons",
+    "license": "MIT",
+    "authors": [
+        "Benjamin Reed <ranger@opennms.org>"
+    ],
+    "keywords": [
+        "fonts",
+        "icon font",
+        "icons",
+        "web font"
+    ],
+    "main": [
+        "css/onmsicons.css",
+        "fonts/*"
+    ],
+    "homepage": "https://github.com/OpenNMS/onmsicons",
+    "description": "Onmsicons"
+}

@@ -1,0 +1,122 @@
+{
+  "name": "OpenNMS",
+  "version": "2.1.0",
+  "build": 407,
+  "description": "OpenNMS Compass",
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/OpenNMS/opennms-compass.git"
+  },
+  "devDependencies": {
+    "bower": "*",
+    "commonmark": "*",
+    "conventional-changelog-cli": "^1.1.1",
+    "copy-webpack-plugin": "^2.1.3",
+    "cordova-android": "*",
+    "cordova-config-utils": "^2.2.1",
+    "css-loader": "^0.23.1",
+    "eslint": "^2.9.0",
+    "eslint-friendly-formatter": "^2.0.4",
+    "eslint-loader": "^1.3.0",
+    "exports-loader": "^0.6.3",
+    "expose-loader": "^0.7.1",
+    "file-loader": "^0.8.5",
+    "fs.extra": "*",
+    "grunt-conventional-changelog": "*",
+    "html-loader": "^0.4.3",
+    "imports-loader": "^0.6.5",
+    "jshint": "*",
+    "jshint-stylish": "*",
+    "libxmljs": "^0.17.1",
+    "lodash": "^4.11.2",
+    "lodash.merge": "^4.3.5",
+    "lodash.padstart": "^4.4.0",
+    "lodash.repeat": "^4.0.2",
+    "merge2": "*",
+    "ng-annotate-webpack-plugin": "^0.1.2",
+    "ngtemplate-loader": "^1.3.1",
+    "node-sass": "^3.7.0",
+    "phantomjs": "^2.1.7",
+    "sass-loader": "^3.2.0",
+    "script-loader": "^0.7.0",
+    "shelljs": "^0.7.0",
+    "style-loader": "^0.13.1",
+    "url-loader": "^0.5.7",
+    "webpack": "^1.13.0",
+    "xcode": "^0.8.4",
+    "xmldom": "^0.1.22",
+    "xpath": "0.0.23"
+  },
+  "cordovaPlugins": [
+    "ionic-plugin-keyboard",
+    "cordova-plugin-extension",
+    "cordova-plugin-console",
+    "cordova-plugin-datepicker",
+    {
+      "locator": "https://github.com/apache/cordova-plugin-file",
+      "id": "cordova-plugin-file"
+    },
+    "cordova-plugin-geolocation",
+    "cordova-plugin-inappbrowser",
+    "cordova-plugin-network-information",
+    "cordova-plugin-splashscreen",
+    "cordova-plugin-statusbar",
+    "cordova-plugin-whitelist",
+    {
+      "locator": "https://github.com/bez4pieci/Phonegap-Cookies-Plugin",
+      "id": "com.bez4pieci.cookies"
+    },
+    {
+      "locator": "https://github.com/RangerRick/cordova-certificate-plugin.git",
+      "id": "com.raccoonfink.cordova.plugins.certificates"
+    },
+    {
+      "locator": "https://github.com/OpenNMS/cordova-plugin-json-storage.git",
+      "id": "cordova-plugin-json-storage"
+    },
+    {
+      "locator": "https://github.com/RangerRick/cordova-HTTP.git",
+      "id": "com.raccoonfink.cordova.plugins.http"
+    },
+    "cordova-plugin-screen-orientation",
+    "cordova-plugin-crosswalk-webview",
+    "cordova-plugin-sqlite-2",
+    {
+      "locator": "https://github.com/RangerRick/cordova-plugin-chrome-apps-system-memory.git#master",
+      "id": "cordova-plugin-chrome-apps-system-memory"
+    },
+    "cordova-plugin-wkwebview-engine",
+    "cordova-plugin-google-analytics"
+  ],
+  "cordovaPlatforms": [
+    {
+      "platform": "android",
+      "version": "5.1.1",
+      "locator": "android@5.1.1"
+    },
+    {
+      "platform": "ios",
+
+      "version": "4.1.1",
+      "locator": "ios@4.1.1"
+    }
+  ],
+  "scripts": {
+    "setup": "bower install && npm install && ionic state reset",
+    "webpack": "webpack --colors --display-error-details",
+    "webpack-release": "webpack --colors --display-error-details --env=production",
+    "build": "npm run webpack && ionic build",
+    "release-build": "ionic prepare --release && npm run webpack-release && ionic build --release",
+    "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0 -u",
+    "prepare": "npm run webpack && ionic prepare",
+    "increment": "bin/update-build-number.js",
+    "release": "npm run lint && npm run test && npm run release-build && bin/sign-android.sh",
+    "verbose-build": "npm run lint && npm run test && webpack --debug --colors --display-modules --display-chunks --display-error-details --display-origins --display-reasons",
+    "genymotion": "ionic run -slc android",
+    "android": "ionic emulate -slc android",
+    "ios": "ionic emulate -slc --address=localhost --target='iPhone-6s, 9.3' ios",
+    "device": "ionic run --device -slc ios",
+    "watch": "webpack --colors --display-error-details --watch",
+    "lint": "eslint . --ext .js"
+  }
+}

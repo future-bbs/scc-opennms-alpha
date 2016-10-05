@@ -1,0 +1,48 @@
+{
+  "name": "version_compare",
+  "version": "0.0.3",
+  "description": "Compare version strings.",
+  "main": "version_compare.js",
+  "scripts": {
+    "pretest": "npm install",
+    "test": "mocha tests/mocha.js"
+  },
+  "testling": {
+    "files": "test/*.js",
+    "browsers": [
+      "ie/6..latest",
+      "chrome/22..latest",
+      "firefox/16..latest",
+      "safari/latest",
+      "opera/11.0..latest",
+      "iphone/6",
+      "ipad/6",
+      "android-browser/latest"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gabe0x02/version_compare.git"
+  },
+  "keywords": [
+    "version",
+    "compare"
+  ],
+  "contributors": [
+    "Gabriel Littman (https://github.com/gabe0x02)",
+    "Jon (http://stackoverflow.com/users/50079/jon)",
+    "ripper234 (http://stackoverflow.com/users/11236/ripper234)"
+  ],
+  "license": "CC-BY-SA",
+  "bugs": {
+    "url": "https://github.com/gabe0x02/version_compare/issues"
+  },
+  "homepage": "https://github.com/gabe0x02/version_compare",
+  "devDependencies": {
+    "karma": "^0.12.24",
+    "karma-chrome-launcher": "^0.1.5",
+    "karma-mocha": "^0.1.9",
+    "mocha": "^2.0.1",
+    "should": "^4.1.0"
+  }
+}

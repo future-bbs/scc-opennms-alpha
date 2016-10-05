@@ -1,0 +1,13 @@
+{
+  "name": "flot-axislabels",
+  "homepage": "https://github.com/j-white/flot-axislabels",
+  "_release": "0d6ae9a793",
+  "_resolution": {
+    "type": "branch",
+    "branch": "master",
+    "commit": "0d6ae9a793383ce2ba22924f27cab1f444ff7509"
+  },
+  "_source": "https://github.com/j-white/flot-axislabels.git",
+  "_target": "master",
+  "_originalSource": "https://github.com/j-white/flot-axislabels.git"
+}
