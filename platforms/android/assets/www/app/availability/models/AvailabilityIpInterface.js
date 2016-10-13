@@ -1,6 +1,7 @@
-/* jshint -W069 */ /* "better written in dot notation" */
+'use strict';
 
 var AvailabilityService = require('./AvailabilityService'),
+  md5 = require('js-md5'),
   moment = require('moment');
 
 /**
@@ -10,8 +11,6 @@ var AvailabilityService = require('./AvailabilityService'),
  * @constructor
  */
 function AvailabilityIpInterface(iface) {
-  'use strict';
-
   var self = this;
 
   /**
@@ -21,7 +20,7 @@ function AvailabilityIpInterface(iface) {
    * @propertyOf AvailabilityIpInterface
    * @returns {number} Interface ID
    */
-  self.id   = Number(iface['_id']);
+  self.id   = parseInt(iface._id, 10);
 
   /**
    * @description
@@ -30,7 +29,7 @@ function AvailabilityIpInterface(iface) {
    * @propertyOf AvailabilityIpInterface
    * @returns {number} Interface's availability (as a percentage)
    */
-  self.availability = parseFloat(iface['_availability']);
+  self.availability = parseFloat(iface._availability);
 
   /**
    * @description
@@ -39,7 +38,9 @@ function AvailabilityIpInterface(iface) {
    * @propertyOf AvailabilityIpInterface
    * @returns {string} The IP address of the interface.
    */
-  self.address = iface['_address'];
+  self.address = iface._address;
+
+  var hashbits = [self.id, self.availability, self.address];
 
   /**
    * @description
@@ -53,11 +54,25 @@ function AvailabilityIpInterface(iface) {
     if (!angular.isArray(iface.services.service)) {
       iface.services.service = [iface.services.service];
     }
-    for (var i=0, len=iface.services.service.length; i < len; i++) {
-      self.services.push(new AvailabilityService(iface.services.service[i]));
+    for (var i=0, len=iface.services.service.length, svc; i < len; i++) {
+      svc = new AvailabilityService(iface.services.service[i]);
+      self.services.push(svc);
+      hashbits.push(svc.hash);
     }
   }
 
+  self.hash = md5(hashbits.join('|'));
 }
+
+AvailabilityIpInterface.prototype.toJSON = function() {
+  return {
+    _id: this.id,
+    _availability: this.availability,
+    _address: this.address,
+    services: {
+      service: self.services
+    }
+  };
+};
 
 module.exports = AvailabilityIpInterface;

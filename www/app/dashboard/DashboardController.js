@@ -2,24 +2,38 @@
 	'use strict';
 
 	var angular = require('angular'),
-		AlarmFilter = require('../alarms/AlarmFilter'),
+		AlarmFilter = require('../alarms/models/AlarmFilter'),
 		$ = require('jquery');
 
+	var Server = require('../servers/models/Server');
+	var Constants = require('../misc/Constants');
+
+	var initialLoad = true;
+
+	require('angular-debounce');
+
+	require('./Service');
 	require('../alarms/AlarmService');
-	require('../availability/AvailabilityService');
+	require('../availability/Service');
 	require('../nodes/ResourceService');
 	require('../outages/OutageService');
 	require('../servers/Servers');
 	require('../settings/SettingsService');
 
+	require('../misc/Cache');
+	require('../misc/Capabilities');
 	require('../misc/Errors');
 	require('../misc/Info');
 	require('../misc/Modals');
+	require('../misc/OnmsGraph');
 	require('../misc/util');
 
-	var dashboardTemplate = require('ngtemplate!html!./dashboard.html');
-	var loadingTemplate = require('ngtemplate!html!../misc/loading.html');
-	var serverPopoverTemplate = require('ngtemplate!html!./server-popover.html');
+	var dashboardTemplate = require('ngtemplate!./dashboard.html');
+	var loadingTemplate = require('ngtemplate!../misc/loading.html');
+	var serverPopoverTemplate = require('ngtemplate!./server-popover.html');
+
+	var favoriteGraphsTemplate = require('ngtemplate!./dashboard-favorite-graphs.html');
+	var availabilityTemplate = require('ngtemplate!./dashboard-availability.html');
 
 	var severityOrder = [
 		'INDETERMINATE',
@@ -31,6 +45,10 @@
 		'CRITICAL'
 	];
 
+	var SHORT_DELAY = 50,
+		REFRESH_DELAY = 500,
+		LONG_REFRESH_DELAY = 5000;
+
 	var sortAlarmData = function(a, b) {
 		return severityOrder.indexOf(b.label.toUpperCase()) - severityOrder.indexOf(a.label.toUpperCase());
 	};
@@ -39,8 +57,12 @@
 		'ionic',
 		'angular-flot',
 		'rt.debounce',
+		'opennms.dashboard.Service',
+		'opennms.misc.Cache',
+		'opennms.misc.OnmsGraph',
 		'opennms.services.Alarms',
 		'opennms.services.Availability',
+		'opennms.services.Capabilities',
 		'opennms.services.Errors',
 		'opennms.services.Info',
 		'opennms.services.Modals',
@@ -61,27 +83,33 @@
 			controller: 'DashboardCtrl'
 		});
 	})
-	.controller('DashboardCtrl', function($q, $rootScope, $scope, $injector, $interval, $log, $timeout, $state, $document, $window, $ionicLoading, $ionicPopup, $ionicPopover, $ionicSlideBoxDelegate, debounce, AlarmService, AvailabilityService, Errors, Info, Modals, OutageService, ResourceService, Servers, util) {
+	.controller('DashboardCtrl', function($document, $injector, $interval, $ionicLoading, $ionicPopup, $ionicPopover, $ionicSlideBoxDelegate, $ionicViewSwitcher, $log, $q, $rootScope, $scope, $state, $timeout, $window, AlarmService, AvailabilityService, Cache, Capabilities, DashboardService, debounce, Errors, Info, Modals, OutageService, ResourceService, Servers, util) {
 		$log.info('DashboardCtrl: Initializing.');
+
+		$scope.favoriteGraphsTemplate = favoriteGraphsTemplate;
+		$scope.availabilityTemplate = availabilityTemplate;
 
 		$scope.donuts = {};
 
-		var updateArrows = function(height) {
-			var arrowOffset = Math.round(height * 0.5) - 50;
+		$scope.supportsGraphs = Capabilities.graphs();
+		util.onInfoUpdated(function() {
+			$scope.supportsGraphs = Capabilities.graphs();
+		});
 
-			var outageArrow = document.getElementById('outage-arrow');
-			if (outageArrow) {
-				outageArrow.style.top = arrowOffset + 'px';
-			}
-
-			var alarmArrow = document.getElementById('alarm-arrow');
-			if (alarmArrow) {
-				alarmArrow.style.top = arrowOffset + 'px';
-			}
+		$scope.goToAlarms = function() {
+			$ionicViewSwitcher.nextDirection('back');
+			$state.go('alarms');
 		};
 
 		$scope.refreshDonutSlide = function(index) {
 			$scope.currentDonutSlide = index;
+		};
+
+		$scope.donutVisible = function(type) {
+			if (Errors.hasError('dashboard-'+type)) {
+				return false;
+			}
+			return $scope.donutSize && $scope.donutSize > 0 && $scope.donuts && $scope.donuts[type] && $scope.donuts[type].data && $scope.donuts[type].options && $scope.donuts[type].options.series; // eslint-disable-line no-magic-numbers
 		};
 
 		var shouldHideDonut = {
@@ -93,24 +121,22 @@
 			if (value === true) {
 				shouldHideDonut[type] = true;
 			} else {
-				setTimeout(function() {
+				$timeout(function() {
 					shouldHideDonut[type] = false;
-				}, 50);
+				}, SHORT_DELAY);
 			}
 		};
 
 		$scope.donutClass = function(type) {
 			if (shouldHideDonut[type]) {
 				return 'invisible';
-			} else {
-				return '';
 			}
+
+			return '';
 		};
 
-		var updateLogo = function(info) {
-			if (!info) {
-				info = Info.get();
-			}
+		var updateLogo = function(_info) {
+			var info = _info? _info : Info.get();
 			if (info.packageName === 'meridian') {
 				$scope.logo = 'images/meridian.svg';
 			} else {
@@ -118,74 +144,6 @@
 			}
 		};
 
-		var sortFavorites = function(a, b) {
-			var ret = a.nodeLabel.localeCompare(b.nodeLabel);
-			if (ret === 0) {
-				ret = a.graphName.localeCompare(b.graphName);
-			}
-			return ret;
-		};
-
-		var refreshFavorites = function() {
-			//$log.debug('refreshing favorites');
-			$scope.graphs = {};
-			$scope.favoriteGraphs = [];
-			return ResourceService.favorites().then(function(favs) {
-				var favorite,
-					graphPromises = [];
-
-				favs.sort(sortFavorites);
-
-				for (var i=0, len=favs.length; i < len; i++) {
-					favorite = favs[i];
-					graphPromises.push(ResourceService.graph(favorite.graphName));
-				}
-
-				return $q.all(graphPromises).then(function(gds) {
-					var graphDefs = {}, def;
-					for (var i=0, len=gds.length; i < len; i++) {
-						def = gds[i];
-						graphDefs[def.name] = def;
-					}
-
-					if ($scope.currentGraphSlide >= favs.length) {
-						// "current" graph is now higher than the number of graphs we have
-						$scope.currentGraphSlide = 0;
-					}
-					$scope.graphs = graphDefs;
-					$scope.favoriteGraphs = favs;
-				});
-			}).finally(function() {
-				$scope.$broadcast('scroll.refreshComplete');
-				$timeout(function() {
-					var delegate = $ionicSlideBoxDelegate.$getByHandle('graph-slide-box');
-					delegate.slide($scope.currentGraphSlide);
-					delegate.update();
-				});
-			});
-		};
-
-		var resetFavorites = function() {
-			$scope.graphs = [];
-			$scope.favoriteGraphs = [];
-		};
-
-		var refreshAvailability = function() {
-			return AvailabilityService.availability().then(function(results) {
-				Errors.clear('availability');
-				$scope.availability = results;
-				return results;
-			}, function(err) {
-				Errors.set('availability', err);
-				$scope.availability = undefined;
-				return $q.reject(err);
-			});
-
-		};
-
-		var resetAvailability = function() {
-			$scope.availability = undefined;
-		};
 
 		var labelFormatter = function(label, series) {
 			//return "<div style='text-align:center; text-shadow: -1px -1px black, 1px -1px black, 1px 1px black, -1px 1px black; padding:2px; color:white;'>" + label + '<br/>' + series.data[0][1] + "</div>";
@@ -228,9 +186,9 @@
 			}
 		};
 
-		var updateTitles = function() {
+		var updateDonuts = debounce(REFRESH_DELAY, function() {
 			var updateTitle = function(type) {
-				$log.debug('updateTitles(' + type + ')');
+				$log.debug('updateDonuts(' + type + ')');
 				var visible, hidden;
 				if ($rootScope.wide) {
 					//$log.debug('wide is enabled');
@@ -259,120 +217,128 @@
 						}
 					}
 				}
+
+				$('.donut-overlay').height($scope.donutSize);
+				$scope.$broadcast('scroll.refreshComplete');
 			};
 
 			updateTitle('outages');
 			updateTitle('alarms');
-		};
+		});
 
 		var resetOutages = function() {
 			hideDonut('outages', true);
 			if ($scope.donuts && $scope.donuts.outages) {
 				$scope.donuts.outages = {};
 			}
-			updateTitles();
+			updateDonuts();
 		};
 
-		var refreshOutages = function() {
-			return OutageService.get().then(function(results) {
-				var data = {}, outages = [], outage, service, total = 0;
+		$scope.$on('opennms.dashboard.update.outages', function(ev, update) {
+			$log.debug('Dashboard Update Outages: ' + (update.success? 'Success':'Failure'));
 
-				for (var i=0, len=results.length; i < len; i++) {
-					outage = results[i];
-					service = outage.monitoredService.serviceName;
-					if (!data[service]) {
-						data[service] = 1;
-					} else {
-						data[service]++;
-					}
-					total++;
+			if (update.success) {
+				$scope.donuts.outages = update.contents;
+				$scope.donuts.outages.options = angular.copy(flotOptions);
+				if ($scope.donuts.outages.total === 0) { // eslint-disable-line no-magic-numbers
+					$scope.donuts.outages.options.series.pie.label.show = false;
 				}
-
-				for (service in data) {
-					if (data.hasOwnProperty(service) && data[service]) {
-						outages.push({
-							label: service,
-							data: data[service]
-						});
-					}
-				}
-				outages.sort(function(a, b) {
-					var ret = b.data - a.data;
-					if (ret === 0) {
-						return a.label.localeCompare(b.label);
-					} else {
-						return ret;
-					}
-				});
-				if (outages.length > 50) {
-					outages.length = 50;
-				}
-
-				Errors.clear('outage-chart');
-				$scope.donuts.outages = {
-					total: total,
-					data: outages,
-					options: angular.extend({}, flotOptions)
-				};
 				hideDonut('outages', false);
-				updateTitles();
-				return outages;
-			}, function(err) {
-				Errors.set('outage-chart', err);
+				updateDonuts();
+			} else {
 				resetOutages();
-				updateTitles();
-				return $q.reject(err);
-			}).finally(function() {
-				$scope.$broadcast('scroll.refreshComplete');
-			});
+			}
+		});
 
-		};
 
 		var resetAlarms = function() {
 			hideDonut('alarms', true);
 			if ($scope.donuts && $scope.donuts.alarms) {
 				$scope.donuts.alarms = {};
 			}
-			updateTitles();
+			updateDonuts();
 		};
 
-		var refreshAlarms = function() {
-			return AlarmService.severities().then(function(results) {
-				var severities = [], severity, total = 0;
+		$scope.$on('opennms.dashboard.update.alarms', function(ev, update) {
+			$log.debug('Dashboard Update Alarms: ' + (update.success? 'Success':'Failure'));
 
-				for (var i=0, len=results.length; i < len; i++) {
-					severity = results[i];
-					total += severity.count;
-					severities.push({
-						label: severity.severity.capitalize(),
-						data: severity.count,
-						color: util.color(severity.severity)
-					});
+			if (update.success) {
+				$scope.donuts.alarms = update.contents;
+				$scope.donuts.alarms.options = angular.copy(flotOptions);
+				if ($scope.donuts.alarms.total === 0) { // eslint-disable-line no-magic-numbers
+					$scope.donuts.alarms.options.series.pie.label.show = false;
 				}
-
-				Errors.clear('alarm-chart');
-				$scope.donuts.alarms = {
-					total: total,
-					data: severities,
-					options: angular.extend({}, flotOptions)
-				};
 				hideDonut('alarms', false);
-				updateTitles();
-				return severities;
-			}, function(err) {
-				Errors.set('alarm-chart', err);
+				updateDonuts();
+			} else {
 				resetAlarms();
-				updateTitles();
-				return $q.reject(err);
-			}).finally(function() {
-				$scope.$broadcast('scroll.refreshComplete');
-			});
+			}
+		});
 
+		var resetAvailability = function() {
+			$scope.availability = undefined;
 		};
+
+		$scope.$on('opennms.dashboard.update.availability', function(ev, update) {
+			$log.debug('Dashboard Update Availability: ' + (update.success? 'Success':'Failure'));
+
+			if (update.success) {
+				$scope.availability = update.contents;
+				for (var i=0, len=$scope.availability.length, section; i < len; i++) {
+					section = $scope.availability[i];
+					for (var c=0, clen=section.categories.length, category; c < clen; c++) {
+						category = section.categories[c];
+						if (category.outageText.contains('Calculating')) {
+							$log.debug('Availability is still calculating... refreshing in 5 seconds.');
+							$timeout(function() {
+								DashboardService.refreshAvailability();
+							}, LONG_REFRESH_DELAY);
+							return;
+						}
+					}
+				}
+			} else {
+				resetAvailability();
+			}
+		});
+
+		var resetFavorites = function() {
+			$scope.graphs = [];
+			$scope.favoriteGraphs = [];
+			$scope.$broadcast('scroll.refreshComplete');
+		};
+
+		$scope.$on('opennms.dashboard.update.favorites', function(ev, update) {
+			$log.debug('Dashboard Update Favorites: ' + (update.success? 'Success':'Failure'));
+
+			if (update.success) {
+				if ($scope.currentGraphSlide >= update.contents.favorites.length) {
+					// "current" graph is now higher than the number of graphs we have
+					$scope.currentGraphSlide = 0;
+				}
+				$scope.graphs = update.contents.graphDefs;
+				$scope.favoriteGraphs = update.contents.favorites;
+				$scope.$broadcast('scroll.refreshComplete');
+			} else {
+				resetFavorites();
+			}
+			if ($scope.favoriteGraphs.length > 0) { // eslint-disable-line no-magic-numbers
+				$timeout(function() {
+					var delegate = $ionicSlideBoxDelegate.$getByHandle('graph-slide-box');
+					delegate.slide($scope.currentGraphSlide);
+					delegate.update();
+				}, SHORT_DELAY);
+			}
+		});
+
 
 		var refreshing = false;
-		$scope.refreshData = debounce(500, function() {
+		$scope.refreshData = debounce(REFRESH_DELAY, function() {
 			if (refreshing) {
+				return;
+			}
+			if (!$scope.visible) {
+				$log.warn('DashboardController.refreshData(): view is not currently visible, skipping refresh.');
 				return;
 			}
 			refreshing = true;
@@ -380,38 +346,39 @@
 			$log.info('DashboardCtrl.refreshData: refreshing data.');
 
 			var finished = function(type) {
+				$log.info('DashboardCtrl.refreshData: finished refreshing.');
 				util.hideSplashscreen();
+				refreshing = false;
 				$timeout(function() {
-					refreshing = false;
 					$ionicLoading.hide();
 					$scope.$broadcast('scroll.refreshComplete');
-				}, 50);
+				}, SHORT_DELAY);
 			};
 
-			Servers.getDefault().then(function(server) {
-				if (server) {
-					return $q.all([
-						refreshAvailability(),
-						refreshOutages(),
-						refreshAlarms(),
-						refreshFavorites()
-					]);
-				} else {
+			$q.when($scope.server).then(function(server) {
+				if (!server) {
 					return $q.reject('No server configured.');
 				}
+
+				return $q.all([
+					DashboardService.refreshAvailability(),
+					DashboardService.refreshOutages(),
+					DashboardService.refreshAlarms(),
+					DashboardService.refreshFavorites()
+				]);
 			}).finally(function() {
 				finished();
 			});
 		});
 
-		$scope.resetData = function() {
-			$log.debug('Resetting Data.');
-			$scope.serverName = null;
+		function resetData() {
+			$log.debug('DashboardCtrl.resetData()');
+			//$scope.server = null;
 			resetAvailability();
 			resetOutages();
 			resetAlarms();
 			resetFavorites();
-		};
+		}
 
 		$scope.unfavorite = function(favorite) {
 			var graphTitle = $scope.graphs && $scope.graphs[favorite.graphName]? $scope.graphs[favorite.graphName].title : 'graph';
@@ -420,28 +387,31 @@
 				template: 'Remove ' + graphTitle + ' from favorites?',
 				okType: 'button-compass'
 			}).then(function(confirmed) {
-				if (confirmed) {
-					var favoriteIndex = $scope.favoriteGraphs.indexOf(favorite);
-					if (favoriteIndex >= 0) {
-						$scope.favoriteGraphs = [];
-						$ionicSlideBoxDelegate.$getByHandle('graph-slide-box').update();
-					}
-					return ResourceService.unfavorite(favorite.resourceId, favorite.graphName).finally(function() {
-						return refreshFavorites();
-					});
-				} else {
+				if (!confirmed) {
 					return $q.reject('Canceled favorite removal.');
 				}
+
+				var favoriteIndex = $scope.favoriteGraphs.indexOf(favorite);
+				if (favoriteIndex >= 0) { // eslint-disable-line no-magic-numbers
+					$scope.favoriteGraphs = [];
+					$ionicSlideBoxDelegate.$getByHandle('graph-slide-box').update();
+				}
+				return ResourceService.unfavorite(favorite.resourceId, favorite.graphName).finally(function() {
+					return DashboardService.refreshFavorites();
+				});
 			});
 		};
 
 		$scope.refreshGraphSlide = function(index) {
-			$scope.currentGraphSlide = index;
+			if (index !== $scope.currentGraphSlide) {
+				$scope.currentGraphSlide = index;
+				$rootScope.$broadcast('opennms.refreshGraphs');
+			}
 		};
 
 		$scope.shouldRenderGraph = function(index) {
 			//return $scope.currentGraphSlide === index;
-			return $scope.currentGraphSlide >= index - 2 && $scope.currentGraphSlide <= index + 2;
+			return $scope.currentGraphSlide >= index - 2 && $scope.currentGraphSlide <= index + 2; // eslint-disable-line no-magic-numbers
 		};
 
 		$scope.goToDonutSlide = function(slide) {
@@ -467,9 +437,15 @@
 			scope: $scope
 		}).then(function(popover) {
 			popover.scope.selectServer = function(server) {
-				$ionicLoading.show({templateUrl: loadingTemplate, duration: 5000});
 				popover.hide();
-				Servers.setDefault(server);
+				if ($scope.server && $scope.server._id !== server._id) {
+					resetData();
+					updateDonuts();
+					updateDonuts.flush();
+					//$scope.server = server;
+					//$ionicLoading.show({templateUrl: loadingTemplate, duration: 20000}); // eslint-disable-line no-magic-numbers
+					Servers.setDefault(server);
+				}
 			};
 			return popover;
 		});
@@ -481,7 +457,7 @@
 		$scope.currentDonutSlide = 0;
 		$scope.currentGraphSlide = 0;
 		Servers.getDefault().then(function(server) {
-			$scope.serverName = server && server.name? server.name : null;
+			$scope.server = server || null;
 		});
 
 		$scope.range = {
@@ -494,16 +470,24 @@
 		updateLogo();
 
 		util.onDefaultServerUpdated(function(defaultServer) {
+			//$log.debug('DashboardController.onDefaultServerUpdated: ' + angular.toJson(defaultServer));
+			if (defaultServer && defaultServer.equals($scope.server)) {
+				$scope.server.name = defaultServer.name;
+				$log.debug('DashboardController.defaultServerUpdated: server is unchanged.');
+				return;
+			}
+
 			if (defaultServer && angular.isDefined(defaultServer.name)) {
-				$scope.serverName = defaultServer.name;
+				Cache.set('dashboard-default-server', defaultServer);
+				$scope.server = new Server(defaultServer);
 				$scope.refreshData();
 			} else {
-				$scope.resetData();
+				Cache.remove('dashboard-default-server');
+				$scope.server = null;
+				resetData();
 			}
 		});
 
-		util.onDirty('alarms', $scope.refreshData);
-		util.onDirty('outages', $scope.refreshData);
 		util.onInfoUpdated(updateLogo);
 		util.onErrorsUpdated(function(errors) {
 			$scope.errors = errors;
@@ -515,43 +499,50 @@
 				wide   = dims[2],
 				oldDonutSize = $scope.donutSize;
 			if (wide) {
-				$scope.donutSize = Math.round(Math.min(width, height) / 2.0);
-				//$scope.donutSize = Math.round(width / 2.0);
+				$scope.donutSize = Math.round(Math.min(width, height) / 2.0); // eslint-disable-line no-magic-numbers
 			} else {
 				$scope.donutSize = width;
 			}
 
-			$log.debug('Updated donuts: ' + oldDonutSize + ' -> ' + $scope.donutSize);
-			updateArrows(height);
-			updateTitles();
+			if (oldDonutSize !== $scope.donutSize) {
+				$log.debug('Updated donuts: ' + oldDonutSize + ' -> ' + $scope.donutSize);
+				updateDonuts();
+			}
 		});
 
+		$scope.$on('opennms.ready', $scope.refreshData);
 		$scope.$on('$destroy', function() {
 			$scope.serverPopover.then(function(popover) {
 				popover.remove();
 			}).finally(function() {
 				delete $scope.serverPopover;
 			});
+			document.removeEventListener('resume', $scope.refreshData, false);
 		});
 
-		$scope.$on('$ionicView.beforeEnter', function(ev, info) {
-			/* // skip all this for now, getting weird rendering bug
-			$log.debug('info=' + angular.toJson(info));
-			if (info) {
-				if (info.direction === 'back') {
-					// don't refresh if we're going back
-					return;
-				}
-				if (info.stateParams && info.stateParams.refresh === false) {
-					// also don't refresh if we've been explicitly asked not to
-					return;
-				}
-			}
+		document.addEventListener('resume', $scope.refreshData, false);
 
-			// otherwise, fall through to refreshing
-			$log.debug("refreshing");
-			*/
+		util.onLowMemory('dashboard', function(currentView) {
+			$log.debug('DashboardCtrl: resetting data because of low memory.');
+			resetData();
+		});
+
+		var lazyReset;
+		$scope.$on('$ionicView.beforeEnter', function(ev, info) {
+			$scope.visible = true;
+			$timeout.cancel(lazyReset);
 			$scope.refreshData();
+			if (initialLoad) {
+				initialLoad = false;
+				$timeout(DashboardService.refreshFavorites, LONG_REFRESH_DELAY);
+			}
+		});
+		$scope.$on('$ionicView.afterLeave', function(ev) {
+			$scope.visible = false;
+			lazyReset = $timeout(function() {
+				$log.debug('DashboardController: view is stale, resetting data.');
+				resetData();
+			}, Constants.DEFAULT_TIMEOUT);
 		});
 	});
 

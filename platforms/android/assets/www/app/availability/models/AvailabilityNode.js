@@ -1,6 +1,7 @@
-/* jshint -W069 */ /* "better written in dot notation" */
+'use strict';
 
 var AvailabilityIpInterface = require('./AvailabilityIpInterface'),
+  md5 = require('js-md5'),
   moment = require('moment');
 
 /**
@@ -10,8 +11,6 @@ var AvailabilityIpInterface = require('./AvailabilityIpInterface'),
  * @constructor
  */
 function AvailabilityNode(node) {
-  'use strict';
-
   var self = this;
 
   /**
@@ -21,7 +20,7 @@ function AvailabilityNode(node) {
    * @propertyOf AvailabilityNode
    * @returns {number} Node ID
    */
-  self.id   = Number(node['_id']);
+  self.id   = parseInt(node._id, 10);
 
   /**
    * @description
@@ -30,7 +29,7 @@ function AvailabilityNode(node) {
    * @propertyOf AvailabilityNode
    * @returns {number} Node's availability (as a percentage)
    */
-  self.availability = parseFloat(node['_availability']);
+  self.availability = parseFloat(node._availability);
 
   /**
    * @description
@@ -50,6 +49,8 @@ function AvailabilityNode(node) {
    */
   self.serviceDownCount = parseInt(node['_service-down-count'], 10);
 
+  var hashbits = [self.id, self.availability, self.serviceCount];
+
   /**
    * @description
    * @ngdoc property
@@ -62,11 +63,26 @@ function AvailabilityNode(node) {
     if (!angular.isArray(node.ipinterfaces.ipinterface)) {
       node.ipinterfaces.ipinterface = [node.ipinterfaces.ipinterface];
     }
-    for (var i=0, len=node.ipinterfaces.ipinterface.length; i < len; i++) {
-      self.ipinterfaces.push(new AvailabilityIpInterface(node.ipinterfaces.ipinterface[i]));
+    for (var i=0, len=node.ipinterfaces.ipinterface.length, iface; i < len; i++) {
+      iface = new AvailabilityIpInterface(node.ipinterfaces.ipinterface[i]);
+      self.ipinterfaces.push(iface);
+      hashbits.push(iface.hash);
     }
   }
 
+  self.hash = md5(hashbits.join('|'));
 }
+
+AvailabilityNode.prototype.toJSON = function() {
+  return {
+    _id: this.id,
+    _availability: this.availability,
+    '_service-count': this.serviceCount,
+    '_service-down-count': this.serviceDownCount,
+    ipinterfaces: {
+      ipinterface: this.ipinterfaces
+    }
+  };
+};
 
 module.exports = AvailabilityNode;

@@ -2,18 +2,29 @@
 	'use strict';
 
 	var angular = require('angular');
+	require('angular-debounce');
+
+	var Constants = require('../misc/Constants');
+	var Node = require('./models/Node');
 
 	require('./NodeService');
 
+	require('../misc/Cache');
+	require('../misc/Capabilities');
 	require('../misc/Errors');
 	require('../misc/util');
 
-	var nodesTemplate = require('ngtemplate!html!./nodes.html');
-	var loadingTemplate = require('ngtemplate!html!../misc/loading.html');
+	var MAX_NODE_LIST_LENGTH = 20;
+
+	var nodesTemplate = require('ngtemplate!./nodes.html');
+	var loadingTemplate = require('ngtemplate!../misc/loading.html');
 
 	angular.module('opennms.controllers.Nodes', [
 		'ionic',
 		'angularLocalStorage',
+		'rt.debounce',
+		'opennms.misc.Cache',
+		'opennms.services.Capabilities',
 		'opennms.services.Errors',
 		'opennms.services.Nodes',
 		'opennms.services.Util'
@@ -26,7 +37,7 @@
 			controller: 'NodesCtrl'
 		});
 	})
-	.controller('NodesCtrl', function($q, $scope, $log, $timeout, $window, $state, $ionicLoading, storage, util, Errors, NodeService) {
+	.controller('NodesCtrl', function($ionicLoading, $log, $q, $scope, $state, $timeout, $window, Cache, Capabilities, debounce, Errors, NodeService, storage, util) {
 		$log.info('NodesCtrl: initializing.');
 
 		$scope.searching = false;
@@ -36,49 +47,62 @@
 		var emptyPromise = $q.when();
 		var lastSearch = emptyPromise;
 
-		$scope.updateSearch = function(searchFor) {
-			$scope.searching = true;
-			var searchPromise = NodeService.search(searchFor);
-			searchPromise['finally'](function() {
+		var lower = function(s) {
+			if (s) {
+				return s.toLowerCase();
+			}
+
+			return s;
+		};
+
+		$scope.updateSearch = function(searchFor, pullToRefresh) {
+			Cache.get('nodes-list-'+searchFor).then(function(nodes, Node) {
+				$scope.nodes = nodes;
+			});
+
+			if (!pullToRefresh) {
+				$scope.searching = true;
+			}
+			var searchPromise = NodeService.search(lower(searchFor));
+			searchPromise.finally(function() {
 				$ionicLoading.hide();
 				$scope.searching = false;
 				$scope.$broadcast('scroll.refreshComplete');
 			});
 
-			searchPromise.then(function(nodes) {
+			searchPromise.then(function(ret) {
+				var nodes = [];
+				for (var n=0,len=ret.length, node; n < len; n++) {
+					node = ret[n];
+					nodes.push({
+						id: node.id,
+						foreignId: node.foreignId,
+						label: node.label,
+						displayId: node.getDisplayId()
+					});
+				}
 				Errors.clear('nodes');
 				$scope.error = false;
-				//$log.debug('Got nodes:',nodes);
+				//$log.debug('Got nodes:',ret);
 				$scope.searching = false;
 				$scope.nodes = nodes;
-				if (nodes.length === 20 && angular.isUndefined(searchFor) || searchFor.trim() === '') {
+				Cache.set('nodes-list-' + searchFor, nodes);
+				if (nodes.length === MAX_NODE_LIST_LENGTH && (angular.isUndefined(searchFor) || searchFor.trim() === '')) {
 					$scope.nodes.push({id:'more'});
 				}
 			}, function(err) {
 				Errors.set('nodes', err);
 				$scope.error = true;
-				$scope.nodes = [];
+				//$scope.nodes = [];
 			});
 
 			return searchPromise;
 		};
 
-		var _delayedSearchTimeout;
-		var delayedSearch = function() {
-			if (_delayedSearchTimeout) {
-				return;
-			}
-			_delayedSearchTimeout = $timeout(function() {
-				_delayedSearchTimeout = undefined;
-				lastSearch['finally'](function() {
-					lastSearch = $scope.updateSearch($scope.searchString);
-				});
-			}, 200);
-		};
-
-		$scope.viewNode = function(node) {
-			util.hideKeyboard();
-			$state.go('node-detail', {node: node.id});
+		$scope.delayedSearch = function(){
+			lastSearch.finally(function() {
+				lastSearch = $scope.updateSearch($scope.searchString);
+			});
 		};
 
 		$scope.refreshData = function() {
@@ -86,18 +110,36 @@
 				templateUrl: loadingTemplate,
 				hideOnStateChange: true
 			});
-			$scope.updateSearch($scope.searchString);
+			$scope.delayedSearch();
 		};
+
+		function resetData() {
+			$scope.searching = false;
+			$scope.nodes = [];
+		}
 
 		$scope.$watch('searchString', function(newValue) {
 			storage.set('opennms.nodes.search-string', newValue);
-			delayedSearch();
+			$scope.delayedSearch();
 		});
 
-		util.onSettingsUpdated($scope.refreshData);
+		util.onSettingsUpdated($scope.delayedSearch);
+		util.onLowMemory('nodes', function(currentView) {
+			$log.debug('NodesCtrl: resetting data because of low memory.');
+			resetData();
+		});
 
-		$scope.$on('ionicView.beforeEnter', function() {
-			$scope.refreshData();
+		var lazyReset;
+		$scope.$on('$ionicView.beforeEnter', function() {
+			$timeout.cancel(lazyReset);
+			$scope.delayedSearch();
+		});
+		$scope.$on('$ionicView.afterLeave', function() {
+			if (Capabilities.lowMemory()) {
+				resetData();
+			} else {
+				lazyReset = $timeout(resetData, Constants.DEFAULT_TIMEOUT);
+			}
 		});
 	});
 

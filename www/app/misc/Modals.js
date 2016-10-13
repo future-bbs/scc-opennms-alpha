@@ -1,10 +1,13 @@
 (function() {
 	'use strict';
 
-	var angular = require('angular');
+	var angular = require('angular'),
+		Outage = require('../outages/models/Outage'),
+		OutageSummary = require('../outages/models/OutageSummary');
 
-	require('./Analytics');
-	require('./BuildConfig');
+	require('../../../generated/misc/BuildConfig');
+
+	require('./Cache');
 	require('./Errors');
 	require('./Info');
 	require('./util');
@@ -15,15 +18,15 @@
 	require('../servers/Servers');
 	require('../settings/SettingsService');
 
-	var alarmDetailTemplate = require('ngtemplate!html!../alarms/alarm-detail.html');
-	var outagesTemplate = require('ngtemplate!html!../outages/outages.html');
-	var settingsTemplate = require('ngtemplate!html!../settings/settings.html');
+	var alarmDetailTemplate = require('ngtemplate!../alarms/alarm-detail.html');
+	var outagesTemplate = require('ngtemplate!../outages/outages.html');
+	var settingsTemplate = require('ngtemplate!../settings/settings.html');
 
 	angular.module('opennms.services.Modals', [
 		'ionic',
 		'ngCordova',
+		'opennms.misc.Cache',
 		'opennms.services.Alarms',
-		'opennms.services.Analytics',
 		'opennms.services.BuildConfig',
 		'opennms.services.Errors',
 		'opennms.services.Events',
@@ -33,7 +36,7 @@
 		'opennms.services.Settings',
 		'opennms.services.Util'
 	])
-	.factory('Modals', function($q, $rootScope, $interval, $log, $ionicModal, $ionicPopup, AlarmService, Analytics, Errors, EventService, Info, OutageService, Servers, Settings, util) {
+	.factory('Modals', function($q, $rootScope, $interval, $log, $ionicModal, $ionicPopup, AlarmService, Cache, Errors, EventService, Info, OutageService, Servers, Settings, util) {
 		$log.info('Modals: initializing.');
 
 		var $scope = $rootScope.$new();
@@ -64,20 +67,26 @@
 			var timer;
 
 			var getOutages = function(outage) {
-				OutageService.node(outage.nodeId).then(function(nodeOutages) {
+				Cache.get('modal-outages-' + outage.nodeId, Outage).then(function(nodeOutages) {
+					outage.nodeOutages = nodeOutages;
+				});
+				return OutageService.node(outage.nodeId).then(function(nodeOutages) {
 					nodeOutages.sort(function(a, b) {
 						var comp = a.ipAddress.localeCompare(b.ipAddress);
-						if (comp === 0) {
+						if (comp === 0) { // eslint-disable-line no-magic-numbers
 							return a.monitoredService.serviceName.localeCompare(b.monitoredService.serviceName);
-						} else {
-							return comp;
 						}
+
+						return comp;
 					});
 					outage.nodeOutages = nodeOutages;
+					Cache.set('modal-outages-' + outage.nodeId, nodeOutages);
 					return nodeOutages;
-				}, function(err) {
+				}).catch(function(err) {
 					outage.nodeOutages = [];
-					return err;
+					return $q.reject(err);
+				}).finally(function() {
+					modal.scope.$broadcast('scroll.refreshComplete');
 				});
 			};
 
@@ -91,6 +100,9 @@
 
 			modal.scope.refreshOutages = function() {
 				$log.debug('Modals.outages.refreshOutages()');
+				Cache.get('modal-outages', OutageSummary).then(function(summaries) {
+					modal.scope.outages = summaries;
+				});
 				return OutageService.summaries().then(function(outages) {
 					$log.debug('Got outages: ' + outages.length);
 					var oldOutages = byId(modal.scope.outages);
@@ -103,9 +115,10 @@
 						getOutages(outages[i]);
 					}
 					modal.scope.outages = outages;
+					Cache.set('modal-outages', outages);
 					delete modal.scope.error;
 					return outages;
-				}, function(err) {
+				}).catch(function(err) {
 					$log.error('Error refreshing outages: ' + angular.toJson(err));
 					modal.scope.error = err;
 					modal.scope.outages = [];
@@ -129,7 +142,7 @@
 			modal.scope.show = function() {
 				modal.scope.outages = [];
 				modal.scope.refreshOutages().then(function() {
-					Analytics.trackView('outages');
+					util.trackView('outages');
 					modal.show();
 				});
 			};
@@ -146,7 +159,7 @@
 			$scope.outageModal.resolve(modal);
 		});
 
-		$ionicModal.fromTemplateUrl('templates/alarm-detail.html', {
+		$ionicModal.fromTemplateUrl(alarmDetailTemplate, {
 			scope: $scope.$new(),
 			animation: 'slide-in-up'
 		}).then(function(modal) {
@@ -154,7 +167,7 @@
 			modal.scope.updateAlarmData = function() {
 				if (modal.scope.alarm && modal.scope.alarm.id) {
 					var promise = AlarmService.alarm(modal.scope.alarm.id);
-					promise['finally'](function() {
+					promise.finally(function() {
 						modal.scope.$broadcast('scroll.refreshComplete');
 					});
 					promise.then(function(alarm) {
@@ -167,7 +180,7 @@
 			};
 			modal.scope.clear = function() {
 				AlarmService.clear(modal.scope.alarm).then(modal.scope.updateAlarmData, function(err) {
-					$log.error('Modals.alarmDetail.clear: error: ',err);
+					$log.error('Modals.alarmDetail.clear: error: ' + angular.toJson(err));
 					if (err.permissionDenied()) {
 						$ionicPopup.alert({
 							title: 'Permission Denied',
@@ -181,7 +194,7 @@
 			};
 			modal.scope.escalate = function() {
 				AlarmService.escalate(modal.scope.alarm).then(modal.scope.updateAlarmData, function(err) {
-					$log.error('Modals.alarmDetail.escalate: error: ',err);
+					$log.error('Modals.alarmDetail.escalate: error: ' + angular.toJson(err));
 					if (err.permissionDenied()) {
 						$ionicPopup.alert({
 							title: 'Permission Denied',
@@ -234,7 +247,7 @@
 			modal.scope.show = function(alarm) {
 				modal.scope.alarm = alarm;
 				startRefresh();
-				Analytics.trackView('alarm-detail');
+				util.trackView('alarm-detail');
 				modal.show();
 			};
 			modal.scope.hide = function() {
@@ -257,7 +270,7 @@
 			modal.scope.show = function(launchAdd) {
 				//$scope.launchAddServer = launchAdd;
 				modal.scope.launchAddServer = launchAdd;
-				Analytics.trackView('settings');
+				util.trackView('settings');
 				modal.show();
 			};
 			modal.scope.hide = function() {

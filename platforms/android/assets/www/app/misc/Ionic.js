@@ -3,7 +3,7 @@
 
 	var angular = require('angular');
 
-	require('./BuildConfig');
+	require('../../../generated/misc/BuildConfig');
 
 	angular.module('opennms.services.Ionic', [
 		'ionic',
@@ -65,10 +65,10 @@
 						cancelType: 'button-default',
 						okType: 'button-compass'
 					});
-				} else {
-					return false;
 				}
-			}, function(err) {
+
+				return false;
+			}).catch(function(err) {
 				$log.error('Ionic.promptForUpdates: failed: ' + angular.toJson(err));
 				return false;
 			});

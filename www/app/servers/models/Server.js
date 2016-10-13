@@ -1,4 +1,4 @@
-/* jshint -W069 */ /* "better written in dot notation" */
+'use strict';
 
 var moment = require('moment'),
   URI = require('urijs');
@@ -10,12 +10,8 @@ var moment = require('moment'),
  * @constructor
  */
 function Server(server) {
-  'use strict';
-
-  var self = this;
-  if (!server) {
-    server = {};
-  }
+  var self = this,
+    _server = server || {};
 
   /**
    * @description
@@ -24,7 +20,7 @@ function Server(server) {
    * @propertyOf Server
    * @returns {string} Unique Identifier
    */
-  self._id = server._id;
+  self._id = _server._id;
 
   /**
    * @description
@@ -33,7 +29,7 @@ function Server(server) {
    * @propertyOf Server
    * @returns {string} Revision
    */
-  self._rev = server._rev;
+  self._rev = _server._rev;
 
   /**
    * @description
@@ -42,7 +38,7 @@ function Server(server) {
    * @propertyOf Server
    * @returns {string} Server Name
    */
-  self.name = server.name;
+  self.name = _server.name;
 
   /**
    * @description
@@ -51,7 +47,7 @@ function Server(server) {
    * @propertyOf Server
    * @returns {string} The root URL of the server.
    */
-  self.url = server.url;
+  self.url = _server.url;
 
   /**
    * @description
@@ -60,7 +56,7 @@ function Server(server) {
    * @propertyOf Server
    * @returns {string} The username used to connect to the server.
    */
-  self.username = server.username;
+  self.username = _server.username;
 
   /**
    * @description
@@ -69,23 +65,36 @@ function Server(server) {
    * @propertyOf Server
    * @returns {string} The password used to connect to the server.
    */
-  self.password = server.password;
+  self.password = _server.password;
 
-  self.relativeUrl = function(segment) {
-    return self.url? URI(self.url).segment(segment).toString() : undefined;
-  };
+}
 
-  self.restUrl = function(segment) {
-    if (self.url) {
-      var url = URI(self.url).segment('rest/');
-      if (segment) {
-        url.segment(segment);
-      }
-      return url.toString();
-    } else {
-      return undefined;
+Server.prototype.relativeUrl = function(segment) {
+  return this.url? URI(this.url).segment(segment).toString() : undefined;
+};
+
+Server.prototype.restUrl = function(segment) {
+  if (this.url) {
+    var url = URI(this.url).segment('rest/');
+    if (segment) {
+      url.segment(segment);
     }
-  };
+    return url.toString();
+  }
+
+  return undefined;
+};
+
+Server.prototype.getHost = function() {
+  return URI(this.url).hostname();
+}
+
+Server.prototype.equals = function(that) {
+  return that &&
+    this.url      === that.url &&
+    this.username === that.username &&
+    this.password === that.password &&
+    this._id      === that._id;
 }
 
 module.exports = Server;

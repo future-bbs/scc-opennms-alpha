@@ -20,10 +20,12 @@
 		'opennms.util.HTTP'
 	])
 
-	.factory('RestService', function($q, $rootScope, $http, $log, $window, HTTP, $injector, Servers, Settings, util) {
+	.factory('RestService', function($q, $rootScope, $log, $window, HTTP, $injector, Servers, Settings, util) {
 		$log.info('RestService: Initializing.');
 
+		var currentServer = null;
 		var ready = $q.defer();
+		ready.resolve(false);
 
 		var x2js = new X2JS();
 
@@ -45,7 +47,7 @@
 			var username, password;
 
 			var oldReady = ready;
-			ready = $q.defer();
+			var newReady = $q.defer();
 
 			var done = function(reject) {
 				if (oldReady) {
@@ -56,22 +58,24 @@
 					}
 				}
 				if (reject) {
-					ready.reject(false);
+					newReady.reject(false);
 				} else {
-					ready.resolve(true);
+					newReady.resolve(true);
 				}
-				return ready.promise;
+				return newReady.promise;
 			};
 
+			ready = newReady;
 			return clearCookies().then(function() {
 				$log.debug('RestService.updateAuthorization: cleared cookies.');
 				return Servers.getDefault();
 			}).then(function(server) {
+				currentServer = angular.copy(server);
+
 				$log.debug('update authorization: default server = ' + (server && server.name? server.name:'unknown'));
 				//$log.debug('username=' + server.username +', password=' + server.password);
 				if (!server || angular.isUndefined(server.username) || angular.isUndefined(server.password)) {
 					$log.info('RestService.updateAuthorization: username or password not set.');
-					delete $http.defaults.headers.common['Authorization'];
 					HTTP.useBasicAuth(undefined, undefined).then(function() {
 						$log.debug('RestService.updateAuthorization: unconfigured basic auth.');
 						return done();
@@ -81,7 +85,6 @@
 					});
 				} else {
 					//$log.debug('RestService.updateAuthorization: setting basic auth with username "' + server.username + '".');
-					$http.defaults.headers.common['Authorization'] = 'Basic ' + $window.btoa(server.username + ':' + server.password);
 					HTTP.useBasicAuth(server.username, server.password).then(function() {
 						$log.debug('RestService.updateAuthorization: configured basic auth with username "' + server.username + '".');
 						return done();
@@ -90,32 +93,52 @@
 						return done();
 					});
 				}
-			}, function(err) {
+			}).catch(function(err) {
 				$log.error('RestService.updateAuthorization: failed: ' + angular.toJson(err));
 				return done(true);
 			});
 		};
 
-		var getUrl = function(restFragment) {
-			//$log.debug('RestService.getUrl: restFragment='+restFragment);
-			return ready.promise.then(function() {
-				//$log.debug('RestService.getUrl: ready');
-				return Servers.getDefault();
-			}).then(function(server) {
+		var getUrl = function(_restFragment) {
+			$log.debug('RestService.getUrl: restFragment='+_restFragment);
+			var restFragment = _restFragment || '';
+
+			var getUrlForServer = function(server) {
 				var restURL = server? server.restUrl() : undefined;
 				//$log.debug('RestService.getUrl: restURL=' + restURL);
 				if (restURL) {
 					var uri = URI(restURL);
 					if (restFragment.startsWith('/')) {
-						restFragment = restFragment.slice(1);
+						restFragment = restFragment.slice(1); // eslint-disable-line no-magic-numbers
 					}
 					uri.segment(restFragment);
 					//$log.debug('RestService.getUrl: returning=' + uri.toString());
 					return uri.toString();
-				} else {
-					//$log.debug('RestService.getUrl: returning=undefined');
-					return undefined;
 				}
+
+				//$log.debug('RestService.getUrl: returning=undefined');
+				return undefined;
+			};
+
+			return ready.promise.then(function() {
+				//$log.debug('RestService.getUrl: ready');
+				return Servers.getDefault();
+			}).then(function(server) {
+				if (server && server._id) {
+					if (!currentServer || server._id !== currentServer._id) {
+						var currentServerId = currentServer? currentServer._id : undefined;
+						$log.debug('Rest.getUrl: current server has changed: ' + currentServerId + ' -> ' + server._id);
+						return updateAuthorization().then(function() {
+							return getUrlForServer(server);
+						});
+					}
+
+					//$log.debug('Rest.getUrl: current server is unchanged: ' + server._id);
+					return getUrlForServer(server);
+				}
+
+				$log.warn('Rest.getUrl: current server is unset');
+				return undefined;
 			});
 		};
 
@@ -125,29 +148,25 @@
 			}).join('&');
 		};
 
-		var doQuery = function(method, restFragment, params, headers) {
-			if (!params) {
-				params = {};
-			}
-			if (!headers) {
-				headers = {};
-			}
+		var doQuery = function(method, restFragment, _params, _headers) {
+			var params = _params || {};
+			var headers = _headers || {};
 
 			var url;
 			return Servers.getDefault().then(function(server) {
 				//$log.debug('Rest.doQuery: ' + method + ' ' + restFragment + ': isServerConfigured=' + serverConfigured);
 				if (server) {
 					return getUrl(restFragment);
-				} else {
-					return $q.reject(new RestError(restFragment, undefined, 0, 'Server information is not complete.'));
 				}
+
+				return $q.reject(new RestError(restFragment, undefined, 0, 'Server information is not complete.')); // eslint-disable-line no-magic-numbers
 			}).then(function(u) {
 				//$log.debug('Rest.doQuery: ' + method + ' ' + restFragment + ': url=' + u);
 				url = u;
 				return Settings.restLimit();
 			}).then(function(restLimit) {
 				var myparams = angular.extend({}, { limit: restLimit }, params);
-				if (myparams.limit === 0) {
+				if (myparams.limit === 0 || myparams.limit === null) { // eslint-disable-line no-magic-numbers
 					delete myparams.limit;
 				}
 				return myparams;
@@ -170,13 +189,17 @@
 				});
 
 			}, function(err) {
-				$log.debug('Rest.doQuery: failed: ' + angular.toJson(err));
+				if (__DEVELOPMENT__) { $log.debug('Rest.doQuery: failed: ' + angular.toJson(err)); }
 				return $q.reject(err);
 			});
 		};
 
 		var doGet = function(restFragment, params, headers) {
 			return doQuery('GET', restFragment, params, headers);
+		};
+
+		var doHead = function(restFragment, params, headers) {
+			return doQuery('HEAD', restFragment, params, headers);
 		};
 
 		var doPut = function(restFragment, params, headers) {
@@ -186,34 +209,13 @@
 		};
 
 		var doPostXml = function(restFragment, data, headers) {
-			return Servers.getDefault().then(function(server) {
-				if (server) {
-					return getUrl(restFragment);
-				} else {
-					return $q.reject(new RestError(restFragment, undefined, 0, 'Server information is not complete.'));
-				}
-			}).then(function(url) {
-				if (!headers) {
-					headers = {};
-				}
-				if (!headers['Content-Type']) {
-					headers['Content-Type'] = 'application/xml';
-				}
+			var h = angular.copy(headers) || {};
+			if (!h['Content-Type']) {
+				h['Content-Type'] = 'application/xml';
+			}
 
-				return $http.post(url, data, {
-					withCredentials: true,
-					headers: headers
-				}).success(function(data) {
-					//$log.debug('Rest.doQuery:',data);
-					return data;
-				}).error(function(data, status, headers, config, statusText) {
-					return $q.reject(new RestError(url, data, status, statusText));
-				});
-			});
+			return doQuery('POST', restFragment, data, headers);
 		};
-
-		util.onServersUpdated(updateAuthorization);
-		updateAuthorization();
 
 		return {
 			url: getUrl,
@@ -229,9 +231,9 @@
 					}
 					if (json !== undefined) {
 						return json;
-					} else {
-						return data;
 					}
+
+					return data;
 				});
 			},
 			getXml: function(restFragment, params, headers) {
@@ -241,6 +243,7 @@
 					return json;
 				});
 			},
+			head: doHead,
 			put: doPut,
 			postXml: doPostXml
 		};

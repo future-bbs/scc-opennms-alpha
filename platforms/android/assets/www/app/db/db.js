@@ -7,6 +7,8 @@
 	require('pouchdb-find/dist/pouchdb.find.min');
 	require('angular-pouchdb');
 
+	var Constants = require('../misc/Constants');
+
 	angular.module('opennms.services.DB', [
 		'ionic',
 		'pouchdb',
@@ -32,20 +34,20 @@
 		};
 
 		var noindexes = function(entry) {
-			return entry.id.indexOf('_design') !== 0;
+			return entry.id.indexOf('_design') !== 0; // eslint-disable-line no-magic-numbers
 		};
 
 		var allDocs = function(dbname) {
 			return getPouch(dbname).allDocs({
 				include_docs: true
 			}).then(function(docs) {
-				if (docs.total_rows > 0) {
+				if (docs.total_rows > 0) { // eslint-disable-line no-magic-numbers
 					return docs.rows.filter(noindexes).map(function(row) {
 						return row.doc;
 					});
-				} else {
-					return [];
 				}
+
+				return [];
 			});
 		};
 
@@ -63,28 +65,54 @@
 			}
 
 			return getPouch(dbname).get(doc._id).then(function(existing) {
-				delete doc._id;
-				delete doc._rev;
-				angular.extend(existing, doc);
-				return getPouch(dbname).put(existing).then(function(response) {
+				var newdoc = angular.copy(doc);
+				delete newdoc._id;
+				delete newdoc._rev;
+				delete newdoc._deleted;
+				var updated = angular.merge({}, existing, newdoc);
+				return getPouch(dbname).put(updated).then(function(response) {
 					doc._id = response.id;
 					doc._rev = response.rev;
 					return doc;
+				}).catch(function(err) {
+					if (err.name === 'conflict') {
+						$log.debug('Conflict occurs attempting to upsert doc._id=' + existing._id + ', doc._rev=' + existing._rev);
+					}
+					return $q.reject(err);
 				});
 			}).catch(function(err) {
-				if (err.error && err.reason === 'missing') {
+				if (err.error && (err.reason === 'missing'||err.reason === 'deleted')) {
 					return createDoc();
-				} else {
-					$log.error('Unable to upsert ' + doc._id + ': ' + err.reason);
-					return $q.reject(err);
 				}
+
+				$log.error('Unable to upsert ' + doc._id + ': ' + err.reason);
+				return $q.reject(err);
+			});
+		};
+
+		var remove = function(dbname, id) {
+			return getPouch(dbname).get(id).then(function(existing) {
+				if (!existing._deleted) {
+					return getPouch(dbname).remove(existing);
+				}
+
+				// already deleted
+				return true;
+			}).catch(function(err) {
+				if (err.status === Constants.HTTP_NOT_FOUND || err.error && err.reason === 'missing') {
+					return true;
+				}
+
+				$log.error('Unable to remove ' + id + ': ' + err.reason);
+				return $q.reject(err);
 			});
 		};
 
 		return {
 			get: getPouch,
 			all: allDocs,
-			upsert: upsert
+			upsert: upsert,
+			remove: remove
 		};
 	});
 

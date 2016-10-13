@@ -21,12 +21,16 @@
 		'opennms.services.Servers',
 		'opennms.services.Settings'
 	])
-	.filter('ip', function() {
+	.filter('ip', function($log) {
 		return function(addr) {
 			if (addr && addr.contains(':')) {
-				var address = new Address6(addr);
-				if (address.isValid()) {
-					return address.correctForm();
+				try {
+					var address = new Address6(addr);
+					if (address.isValid()) {
+						return address.correctForm();
+					}
+				} catch(err) {
+					$log.warn('error formatting ' + addr + ': ' + err);
 				}
 			}
 			return addr;
@@ -34,22 +38,22 @@
 	})
 	.factory('UtilEventBroadcaster', function($rootScope, $log) {
 		var markDirty = function(type) {
-			$log.debug('util.markDirty: ' + type);
+			if (__DEVELOPMENT__) { $log.debug('util.markDirty: ' + type); }
 			$rootScope.$broadcast('opennms.dirty', type);
 		};
 
 		var defaultServerUpdated = function(server) {
-			$log.debug('util.defaultServerUpdated: ' + angular.toJson(server));
+			if (__DEVELOPMENT__) { $log.debug('util.defaultServerUpdated: ' + angular.toJson(server)); }
 			$rootScope.$broadcast('opennms.servers.defaultUpdated', server);
 		};
 
 		var serversUpdated = function(newServers, oldServers) {
-			$log.debug('util.serversUpdated: ' + angular.toJson(newServers));
+			if (__DEVELOPMENT__) { $log.debug('util.serversUpdated: ' + angular.toJson(newServers)); }
 			$rootScope.$broadcast('opennms.servers.updated', newServers, oldServers);
 		};
 
 		var serverRemoved = function(server) {
-			$log.debug('util.serversUpdated: ' + server.name);
+			if (__DEVELOPMENT__) { $log.debug('util.serversUpdated: ' + server.name); }
 			$rootScope.$broadcast('opennms.servers.removed', server);
 		};
 
@@ -60,7 +64,7 @@
 			serverRemoved: serverRemoved
 		};
 	})
-	.factory('UtilEventHandler', function($rootScope, $log) {
+	.factory('UtilEventHandler', function($ionicHistory, $log, $rootScope) {
 		var eventListeners = {
 		};
 
@@ -92,7 +96,7 @@
 
 			for (var i=0, len=types.length; i < len; i++) {
 				if (eventListeners['opennms.dirty'] && eventListeners['opennms.dirty'][types[i]]) {
-					$log.debug('util.onDirty: ' + types[i]);
+					if (__DEVELOPMENT__) { $log.debug('util.onDirty: ' + types[i]); }
 					handleType(eventListeners['opennms.dirty'][types[i]]);
 				}
 			}
@@ -100,7 +104,7 @@
 
 		$rootScope.$on('opennms.errors.updated', function(ev, errors) {
 			if (eventListeners['opennms.errors.updated']) {
-				$log.debug('util.onErrorsUpdated: ' + angular.toJson(errors));
+				if (__DEVELOPMENT__) { $log.debug('util.onErrorsUpdated: ' + angular.toJson(errors)); }
 				$rootScope.$evalAsync(function() {
 					for (var i=0, len=eventListeners['opennms.errors.updated'].length; i < len; i++) {
 						eventListeners['opennms.errors.updated'][i](errors);
@@ -109,9 +113,11 @@
 			}
 		});
 
+		var lastInfo = null;
 		$rootScope.$on('opennms.info.updated', function(ev, info) {
+			lastInfo = info;
 			if (eventListeners['opennms.info.updated']) {
-				$log.debug('util.onInfoUpdated: ' + angular.toJson(info));
+				if (__DEVELOPMENT__) { $log.debug('util.onInfoUpdated: ' + angular.toJson(info)); }
 				$rootScope.$evalAsync(function() {
 					for (var i=0, len=eventListeners['opennms.info.updated'].length; i < len; i++) {
 						eventListeners['opennms.info.updated'][i](info);
@@ -122,7 +128,7 @@
 
 		$rootScope.$on('opennms.product.updated', function(ev, product) {
 			if (eventListeners['opennms.product.updated']) {
-				$log.debug('util.onProductUpdated: ' + product.id);
+				if (__DEVELOPMENT__) { $log.debug('util.onProductUpdated: ' + product.id); }
 				$rootScope.$evalAsync(function() {
 					for (var i=0, len=eventListeners['opennms.product.updated'].length; i < len; i++) {
 						eventListeners['opennms.product.updated'][i](product);
@@ -133,7 +139,7 @@
 
 		$rootScope.$on('opennms.servers.defaultUpdated', function(ev, server) {
 			if (eventListeners['opennms.servers.defaultUpdated']) {
-				$log.debug('util.onDefaultServerUpdated: ' + angular.toJson(server));
+				if (__DEVELOPMENT__) { $log.debug('util.onDefaultServerUpdated: ' + angular.toJson(server)); }
 				$rootScope.$evalAsync(function() {
 					for (var i=0, len=eventListeners['opennms.servers.defaultUpdated'].length; i < len; i++) {
 						eventListeners['opennms.servers.defaultUpdated'][i](server);
@@ -144,7 +150,7 @@
 
 		$rootScope.$on('opennms.servers.updated', function(ev, newServers, oldServers) {
 			if (eventListeners['opennms.servers.updated']) {
-				$log.debug('util.onServersUpdated: ' + angular.toJson(newServers));
+				if (__DEVELOPMENT__) { $log.debug('util.onServersUpdated: ' + angular.toJson(newServers)); }
 				$rootScope.$evalAsync(function() {
 					for (var i=0, len=eventListeners['opennms.servers.updated'].length; i < len; i++) {
 						eventListeners['opennms.servers.updated'][i](newServers, oldServers);
@@ -155,7 +161,7 @@
 
 		$rootScope.$on('opennms.servers.removed', function(ev, server) {
 			if (eventListeners['opennms.servers.removed']) {
-				$log.debug('util.onServerRemoved: ' + server.name);
+				if (__DEVELOPMENT__) { $log.debug('util.onServerRemoved: ' + server.name); }
 				$rootScope.$evalAsync(function() {
 					for (var i=0, len=eventListeners['opennms.servers.removed'].length; i < len; i++) {
 						eventListeners['opennms.servers.removed'][i](server);
@@ -166,10 +172,29 @@
 
 		$rootScope.$on('opennms.settings.updated', function(ev, newSettings, oldSettings, changedSettings) {
 			if (eventListeners['opennms.settings.updated']) {
-				$log.debug('util.onSettingsUpdated: ' + angular.toJson(changedSettings));
+				if (__DEVELOPMENT__) { $log.debug('util.onSettingsUpdated: ' + angular.toJson(changedSettings)); }
 				$rootScope.$evalAsync(function() {
 					for (var i=0, len=eventListeners['opennms.settings.updated'].length; i < len; i++) {
 						eventListeners['opennms.settings.updated'][i](newSettings, oldSettings, changedSettings);
+					}
+				});
+			}
+		});
+
+		document.addEventListener('lowMemory', function() {
+			if (eventListeners['opennms.low-memory']) {
+				var currentView = $ionicHistory.currentView();
+				if (__DEVELOPMENT__) { $log.debug('util.onLowMemory: current view is: ' + currentView.stateName); }
+				$rootScope.$evalAsync(function() {
+					for (var i=0, len=eventListeners['opennms.low-memory'].length, listener, stateName, callback; i < len; i++) {
+						listener = eventListeners['opennms.low-memory'][i];
+						stateName = listener[0];
+						callback = listener[1];
+						if (currentView.stateName === stateName) {
+							$log.debug('util.onLowMemory: skipping currently active ' + stateName);
+						} else {
+							callback(currentView);
+						}
 					}
 				});
 			}
@@ -190,6 +215,9 @@
 			},
 			onInfoUpdated: function(f) {
 				addListener('opennms.info.updated', f);
+				if (lastInfo) {
+					f(lastInfo);
+				}
 			},
 			onProductUpdated: function(f) {
 				addListener('opennms.product.updated', f);
@@ -205,17 +233,20 @@
 			},
 			onSettingsUpdated: function(f) {
 				addListener('opennms.settings.updated', f);
+			},
+			onLowMemory: function(stateName, f) {
+				addListener('opennms.low-memory', [stateName, f]);
 			}
 		};
 	})
-	.factory('util', function($rootScope, $log, $state, $window, $cordovaInAppBrowser, $ionicHistory, $ionicPlatform, $ionicViewSwitcher, Servers, Settings, UtilEventBroadcaster, UtilEventHandler) {
+	.factory('util', function($cordovaInAppBrowser, $ionicHistory, $ionicPlatform, $ionicViewSwitcher, $log, $rootScope, $state, $window, Analytics, Servers, Settings, UtilEventBroadcaster, UtilEventHandler) {
 		$log.info('util: Initializing.');
 
 		$ionicPlatform.ready(function() {
-			if (typeof cordova.plugins.Keyboard !== 'undefined') {
+			if ($window.cordova && $window.cordova.plugins && $window.cordova.plugins.Keyboard) {
 				$log.debug('Util: disabling native keyboard scroll.');
-				cordova.plugins.Keyboard.disableScroll(true);
-				cordova.plugins.Keyboard.hideKeyboardAccessoryBar(false);
+				$window.cordova.plugins.Keyboard.disableScroll(true);
+				//$window.cordova.plugins.Keyboard.hideKeyboardAccessoryBar(false);
 			} else {
 				$log.debug('Util: no Keyboard plugin found.');
 			}
@@ -237,7 +268,7 @@
 			CLEARED: 'ion-happy',
 			NORMAL: 'ion-record',
 			WARNING: 'ion-minus-circled',
-			MINOR: 'ion-alert-circled',
+			MINOR: 'ion-android-alert',
 			MAJOR: 'ion-flame',
 			CRITICAL: 'ion-nuclear'
 		};
@@ -254,13 +285,13 @@
 		var showKeyboard = function() {
 			//$log.debug('util.showKeyboard');
 			if ($window.cordova && $window.cordova.plugins && $window.cordova.plugins.Keyboard) {
-				cordova.plugins.Keyboard.show();
+				$window.cordova.plugins.Keyboard.show();
 			}
 		};
 		var hideKeyboard = function() {
 			//$log.debug('util.hideKeyboard');
 			if ($window.cordova && $window.cordova.plugins && $window.cordova.plugins.Keyboard) {
-				cordova.plugins.Keyboard.close();
+				$window.cordova.plugins.Keyboard.close();
 			}
 		};
 
@@ -273,7 +304,7 @@
 		var openServer = function() {
 			Servers.getDefault().then(function(server) {
 				if (server) {
-					$log.debug('util.openServer: ' + server.url);
+					if (__DEVELOPMENT__) { $log.debug('util.openServer: ' + server.url); }
 					$cordovaInAppBrowser.open(server.url, '_blank');
 				} else {
 					$log.debug('util.openServer: no server defined');
@@ -283,33 +314,41 @@
 			});
 		};
 
-		var trackEvent = function(category, event, label, value) {
-			$rootScope.$broadcast('opennms.analytics.trackEvent', category, event, label, value);
-		};
+		function trackEvent(category, event, label, value) {
+			Analytics.trackEvent(category, event, label, value);
+		}
+		function trackView(viewName) {
+			Analytics.trackView(viewName);
+		}
 
+		function getSeverities() {
+			return Object.keys(colors);
+		}
 
 		return {
 			dashboard: goToDashboard,
 			icon: function(severity) {
-				severity = severity? severity.toUpperCase() : 'INDETERMINATE';
-				return icons[severity] || icons.INDETERMINATE;
+				var _severity = severity? severity.toUpperCase() : 'INDETERMINATE';
+				return icons[_severity] || icons.INDETERMINATE;
 			},
 			color: function(severity) {
-				severity = severity? severity.toUpperCase() : 'INDETERMINATE';
-				return colors[severity] || colors.INDETERMINATE;
+				var _severity = severity? severity.toUpperCase() : 'INDETERMINATE';
+				return colors[_severity] || colors.INDETERMINATE;
 			},
-			severities: function() {
-				var ret = [];
-				for (var sev in colors) {
-					ret.push(sev);
+			severities: getSeverities,
+			nextSeverity: function(severity) {
+				if (!severity) {
+					return severity;
 				}
-				return ret;
+				var severities = getSeverities();
+				return severities[Math.min(severities.length-1, severities.indexOf(severity.toUpperCase()) + 1)]; // eslint-disable-line no-magic-numbers
 			},
 			showKeyboard: showKeyboard,
 			hideKeyboard: hideKeyboard,
 			hideSplashscreen: hideSplashscreen,
 			openServer: openServer,
 			trackEvent: trackEvent,
+			trackView: trackView,
 			dirty: UtilEventBroadcaster.dirty,
 			onDirty: UtilEventHandler.onDirty,
 			onErrorsUpdated: UtilEventHandler.onErrorsUpdated,
@@ -318,7 +357,8 @@
 			onServersUpdated: UtilEventHandler.onServersUpdated,
 			onDefaultServerUpdated: UtilEventHandler.onDefaultServerUpdated,
 			onServerRemoved: UtilEventHandler.onServerRemoved,
-			onSettingsUpdated: UtilEventHandler.onSettingsUpdated
+			onSettingsUpdated: UtilEventHandler.onSettingsUpdated,
+			onLowMemory: UtilEventHandler.onLowMemory
 		};
 	});
 

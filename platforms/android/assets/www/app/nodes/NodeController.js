@@ -2,27 +2,49 @@
 	'use strict';
 
 	var angular = require('angular');
-	require ('ngCordova');
+	require('ngCordova');
+	require('angular-debounce');
+
+	var Constants = require('../misc/Constants');
+	var Node = require('./models/Node');
+	var AvailabilityNode = require('../availability/models/AvailabilityNode');
+	var OnmsEvent = require('../events/models/OnmsEvent');
+	var Outage = require('../outages/models/Outage');
+
+	var SEVERITY_THRESHOLD_NORMAL = 99.99,
+		SEVERITY_THRESHOLD_WARNING = 97,
+		SEVERITY_THRESHOLD_CRITICAL = 0;
+
+	var NODE_EVENTS_LIMIT = 5;
+
+	var GEOLOCATION_TIMEOUT = 5000,
+		GEOLOCATION_SIGFIG = 6;
+
+	var REFRESH_DEBOUNCE = 500;
 
 	require('./NodeService');
 	require('./ResourceService');
 
-	require('../availability/AvailabilityService');
+	require('../availability/Service');
 	require('../events/EventService');
 	require('../outages/OutageService');
 
+	require('../misc/Cache');
 	require('../misc/Capabilities');
 	require('../misc/Errors');
 	require('../misc/util');
 
-	var loadingTemplate = require('ngtemplate!html!../misc/loading.html');
-	var nodeDetailTemplate = require('ngtemplate!html!./node-detail.html');
+	var loadingTemplate = require('ngtemplate!../misc/loading.html');
+	var nodeDetailTemplate = require('ngtemplate!./node-detail.html');
 
 	angular.module('opennms.controllers.Node', [
 		'ionic',
 		'ngCordova',
-		'leaflet-directive',
+		'rt.debounce',
+		'nemLogging',
+		'ui-leaflet',
 		'angularLocalStorage',
+		'opennms.misc.Cache',
 		'opennms.services.Availability',
 		'opennms.services.Capabilities',
 		'opennms.services.Errors',
@@ -40,28 +62,33 @@
 			controller: 'NodeCtrl'
 		});
 	})
-	.controller('NodeCtrl', function($q, $scope, $log, $timeout, $window, $cordovaGeolocation, $ionicLoading, $ionicPopup, storage, util, AvailabilityService, Capabilities, Errors, EventService, NodeService, OutageService, ResourceService) {
+	.controller('NodeCtrl', function($cordovaGeolocation, $ionicLoading, $ionicPopup, $log, $q, $scope, $timeout, $window, AvailabilityService, Cache, Capabilities, debounce, Errors, EventService, NodeService, OutageService, ResourceService, storage, util) {
 		$log.info('NodeCtrl: initializing.');
 
+		$scope.loading = false;
+		$scope.util = util;
 		$scope.availabilityColor = function(value) {
-			if (value >= 99.99) {
+			if (value >= SEVERITY_THRESHOLD_NORMAL) {
 				return 'severity severity-NORMAL';
-			} else if (value >= 97) {
+			} else if (value >= SEVERITY_THRESHOLD_WARNING) {
 				return 'severity severity-WARNING';
-			} else if (value >= 0) {
+			} else if (value >= SEVERITY_THRESHOLD_CRITICAL) {
 				return 'severity severity-CRITICAL';
 			}
 			return 'severity severity-INDETERMINATE';
 		};
-		$scope.leaflet = {
+
+		var leafletDefaults = {
 			markers: {},
 			center: {},
-			defaults: {}
+			defaults: {
+				tileLayer: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+			}
 		};
 
-		var timer;
+		$scope.leaflet = angular.copy(leafletDefaults);
 
-		var resetModel = function() {
+		var resetData = function() {
 			$scope.loaded = false;
 			$scope.node = {};
 			$scope.canUpdateGeolocation = false;
@@ -72,23 +99,15 @@
 			$scope.alarms = undefined;
 			$scope.ipInterfaces = undefined;
 			$scope.snmpInterfaces = undefined;
-			$scope.leaflet = {
-				markers: {},
-				center: {},
-				defaults: {}
-			};
+			$scope.leaflet = angular.copy(leafletDefaults);
 		};
 
 		var showLoading = function() {
-			/*
-			$ionicLoading.show({
-				templateUrl: loadingTemplate,
-				hideOnStateChange: true,
-			});
-*/
+			$scope.loading = true;
 		};
 
 		var hideLoading = function() {
+			$scope.loading = false;
 			$ionicLoading.hide();
 		};
 
@@ -103,65 +122,80 @@
 				return;
 			}
 
-			$log.debug('NodeCtrl.updateData: getting updated data for node: ' + $scope.node.id);
+			$log.debug('NodeCtrl.updateData: getting updated data for node: ' + $scope.nodeId);
 
 			$scope.address = $scope.node.getAddress();
 			if ($scope.address && ($scope.address.city || $scope.address.state || $scope.address.zip)) {
 				$scope.hasAddress = true;
 			}
 			if ($scope.address && ($scope.address.hasOwnProperty('latitude') && $scope.address.hasOwnProperty('longitude'))) {
-				$scope.leaflet.markers = {
-					node: {
+				$scope.leaflet = angular.merge({}, leafletDefaults, {
+					markers: {
+						node: {
+							lat: $scope.address.latitude,
+							lng: $scope.address.longitude,
+							focus: true,
+							draggable: false
+						}
+					}, center: {
 						lat: $scope.address.latitude,
 						lng: $scope.address.longitude,
-						focus: true,
-						draggable: false
+						zoom: 13
+					}, defaults: {
+						attributionControl: false,
+						dragging: false,
+						zoomControl: true,
+						scrollWheelZoom: false,
+						doubleClickZoom: false,
+						touchZoom: false,
+						tap: true
 					}
-				};
-				$scope.leaflet.center = {
-					lat: $scope.address.latitude,
-					lng: $scope.address.longitude,
-					zoom: 13
-				};
-				$scope.leaflet.defaults = {
-					attributionControl: false,
-					dragging: false,
-					zoomControl: true,
-					scrollWheelZoom: false,
-					doubleClickZoom: false,
-					touchZoom: false,
-					tap: true
-				};
+				});
 				//console.log('leaflet=' + angular.toJson($scope.leaflet));
 			}
 
 			$scope.canUpdateGeolocation = Capabilities.setLocation();
 
-			var avail = EventService.node($scope.node.id).then(function(results) {
-				//$log.debug('AvailabilityService got results:',results);
+			Cache.get('node-' + $scope.nodeId + '-availability', AvailabilityNode).then(function(availability) {
+				$scope.availability = availability;
+			});
+			var avail = AvailabilityService.node($scope.nodeId).then(function(results) {
+				if (__DEVELOPMENT__) { $log.debug('AvailabilityService got results:'+angular.toJson(results)); }
 				$scope.availability = results;
+				Cache.set('node-' + $scope.nodeId + '-availability', results);
 				return results;
 			}, function(err) {
 				$log.error('AvailabilityService got error:',err);
 				return err;
 			});
-			var ev = EventService.node($scope.node.id, 5).then(function(results) {
+
+			Cache.get('node-' + $scope.nodeId + '-events', OnmsEvent).then(function(events) {
+				$scope.events = events;
+			});
+			var ev = EventService.node($scope.nodeId, NODE_EVENTS_LIMIT).then(function(results) {
 				//$log.debug('EventService got results:', results);
 				$scope.events = results;
+				Cache.set('node-' + $scope.nodeId + '-events', results);
 				return results;
 			}, function(err) {
 				$log.error('EventService got error:',err);
 				return err;
 			});
-			var outage = OutageService.node($scope.node.id).then(function(results) {
+
+			Cache.get('node-' + $scope.nodeId + '-outages', Outage).then(function(outages) {
+				$scope.outages = outages;
+			});
+			var outage = OutageService.node($scope.nodeId).then(function(results) {
 				//$log.debug('OutageService got results:', results);
 				$scope.outages = results;
+				Cache.set('node-' + $scope.nodeId + '-outages', results);
 				return results;
 			}, function(err) {
 				$log.error('OutageService got error:',err);
 				return err;
 			});
-			$q.all(avail, ev, outage)['finally'](function() {
+
+			$q.all(avail, ev, outage).finally(function() {
 				$scope.loaded = true;
 				$scope.$broadcast('scroll.refreshComplete');
 			});
@@ -177,11 +211,11 @@
 
 		$scope.submitCoordinates = function() {
 			$cordovaGeolocation.getCurrentPosition({
-				timeout: 5000,
+				timeout: GEOLOCATION_TIMEOUT,
 				enableHighAccuracy: true
 			}).then(function(position) {
-				var longitude = position.coords.longitude.toFixed(6);
-				var latitude = position.coords.latitude.toFixed(6);
+				var longitude = position.coords.longitude.toFixed(GEOLOCATION_SIGFIG);
+				var latitude = position.coords.latitude.toFixed(GEOLOCATION_SIGFIG);
 				$ionicPopup.confirm({
 					title: 'Update Coordinates?',
 					template: 'Update <strong>' + $scope.node.label + '</strong> to latitude ' + latitude + ' and longitude ' + longitude + '?',
@@ -205,67 +239,98 @@
 			});
 		};
 
-		$scope.refresh = function() {
-			if ($scope.node.id) {
-				showLoading();
-				NodeService.get($scope.node.id).then(function(n) {
-					showNode(n);
+		var refreshNode = function() {
+			if ($scope.nodeId) {
+				Cache.get('node-' + $scope.nodeId, Node).then(function(node) {
+					showNode(node);
+				}).catch(function(err) {
+					showLoading();
+				});
+				return NodeService.get($scope.nodeId).then(function(n) {
+					Cache.set('node-' + $scope.nodeId, n);
+					return showNode(n);
 				}, function(err) {
 					err.caller = 'NodeCtrl.refresh';
 					$log.error(err.toString());
+					return $q.reject(err);
 				}).finally(function() {
 					hideLoading();
 				});
 			}
+
+			return $q.when();
 		};
 
-		$scope.showGraphButton = Capabilities.graphs();
-		$scope.graphs = function() {
-			ResourceService.resources($scope.node.id).then(function(res) {
-				$log.debug('graphs: got res ' + angular.toJson(res));
-			});
+		var checkResources = function() {
+			var showGraphButton = Capabilities.graphs();
+			if ($scope.nodeId && showGraphButton) {
+				Cache.get('node-' + $scope.nodeId + '-show-graph-button').then(function(res) {
+					$scope.showGraphButton = res;
+				});
+				return ResourceService.resources($scope.nodeId).then(function(res) {
+					//$log.debug('graphs: got res ' + angular.toJson(res));
+					$scope.showGraphButton = res && res.children && res.children.length > 0; // eslint-disable-line no-magic-numbers
+					Cache.set('node-' + $scope.nodeId + '-show-graph-button', $scope.showGraphButton);
+					return $scope.showGraphButton;
+				}).catch(function(err) {
+					$scope.showGraphButton = false;
+					return $scope.showGraphButton;
+				});
+			}
+
+			$scope.showGraphButton = false;
+			return $q.when($scope.showGraphButton);
 		};
 
-		util.onDirty('alarms', function() {
-			if ($scope.node && $scope.node.id) {
-				$scope.refresh();
+		$scope.refresh = debounce(REFRESH_DEBOUNCE, function() {
+			if ($scope.nodeId) {
+				showLoading();
+				$q.all({
+					node: refreshNode(),
+					resources: checkResources()
+				}).finally(function() {
+					hideLoading();
+				});
+			} else {
+				$log.debug('NodeCtrl: no node ID');
 			}
 		});
+
 		util.onInfoUpdated(function(info) {
 			$scope.showGraphButton = Capabilities.graphs();
 			$log.debug('$scope.showGraphButton = ' + $scope.showGraphButton);
-		});
-		util.onSettingsUpdated(function(newSettings, oldSettings, changedSettings) {
-			if (timer && changedSettings && changedSettings.refreshInterval) {
-				$scope.updateData();
-			}
+			$scope.refresh();
 		});
 
+		var lastServer = {};
+		util.onDefaultServerUpdated(function(defaultServer) {
+			if (lastServer.name !== defaultServer.name) {
+				resetData();
+			}
+			lastServer = defaultServer || {};
+			$scope.refresh();
+		});
+		util.onLowMemory('node-detail', function(currentView) {
+			$log.debug('NodeCtrl: resetting data because of low memory.');
+			resetData();
+		});
+
+		var lazyReset;
 		$scope.$on('$ionicView.beforeEnter', function(ev, info) {
-			$log.info('NodeCtrl: entering node view.');
+			$timeout.cancel(lazyReset);
 			if (info && info.stateParams && info.stateParams.node) {
 				var nodeId = parseInt(info.stateParams.node, 10);
-				if ($scope.node && $scope.node.id) {
-					if ($scope.node.id !== nodeId) {
-						$scope.node = { id: nodeId };
-					}
-				} else {
-					$scope.node = { id: nodeId };
-				}
+				$scope.nodeId = nodeId;
 			} else {
 				$log.error('NodeCtrl: unable to determine node from view.');
 			}
-			if (info && info.direction === 'forward') {
-				$scope.refresh();
-			}
+			$scope.refresh();
 		});
-
-		$scope.$on('$ionicView.afterLeave', function(ev, info) {
-			if (info.direction === 'forward') {
-				// we're going to the resources, keep the model in memory
+		$scope.$on('$ionicView.afterLeave', function() {
+			if (Capabilities.lowMemory()) {
+				resetData();
 			} else {
-				$log.debug('NodeCtrl: leaving node view; cleaning up.');
-				resetModel();
+				lazyReset = $timeout(resetData, Constants.DEFAULT_TIMEOUT);
 			}
 		});
 	});

@@ -1,7 +1,10 @@
 'use strict';
 
+require('./Queue');
+
 var module = angular.module('opennms.util.HTTP', [
-	'ng'
+	'ng',
+	'opennms.misc.Queue'
 ]);
 
 ionic.Platform.ready(function() {
@@ -87,10 +90,11 @@ ionic.Platform.ready(function() {
 	}
 });
 
-module.factory('HTTP', function($http, $injector, $log, $q, $window) {
+module.factory('HTTP', function($http, $injector, $interval, $log, $q, $window, Queue) {
 	//var requestTimeout = parseInt($injector.get('config.request.timeout'), 10) * 1000;
 	var requestTimeout = 10000;
 	var enableCachebusting = false;
+	var basicAuth = null;
 
 	var ready;
 	var initialize = function() {
@@ -113,20 +117,21 @@ module.factory('HTTP', function($http, $injector, $log, $q, $window) {
 	var defaultOptions = {
 		cache: false,
 		timeout: requestTimeout,
+		withCredentials: true,
 		headers: {
 			Accept: 'application/xml'
 		}
 	};
 
 	var call = function(passedOptions) {
-		var options = angular.extend({}, defaultOptions, passedOptions);
+		var options = angular.merge({}, defaultOptions, passedOptions);
 
 		if (!ready) {
 			ready = initialize();
 		}
 
 		return ready.then(function(cordovaHTTP) {
-			if (options.url.indexOf('http') !== 0) {
+			if (options.url.indexOf('http') !== 0) { // eslint-disable-line no-magic-numbers
 				return $q.reject(options.url + ' is not a valid URL!');
 			}
 
@@ -145,14 +150,19 @@ module.factory('HTTP', function($http, $injector, $log, $q, $window) {
 				delete options.params.cache;
 			}
 
-			//$log.debug('Making HTTP call with options:' + angular.toJson(options));
+			if (basicAuth && basicAuth.header && !options.headers.hasOwnProperty('Authorization')) {
+				//$log.debug('HTTP.call: setting Authorization header to ' + basicAuth.header);
+				options.headers.Authorization = basicAuth.header;
+			}
+
 			if (cordovaHTTP) {
+				if (__DEVELOPMENT__) { $log.debug('Making Cordova HTTP call with options:' + angular.toJson(options)); }
 				var handleSuccess = function(response) {
 					//$log.debug('HTTP.handleSuccess: ' + angular.toJson(response.data));
 					return response;
 				};
 				var handleError = function(err) {
-					$log.error('HTTP.handleError: ' + angular.toJson(err));
+					$log.error('HTTP.handleError: ' + options.url + ': ' + angular.toJson(err));
 					return $q.reject(err);
 				};
 
@@ -168,49 +178,95 @@ module.factory('HTTP', function($http, $injector, $log, $q, $window) {
 					return cordovaHTTP.post(options.url, options.params, options.headers).then(handleSuccess, handleError);
 				} else if (options.method === 'DELETE') {
 					return cordovaHTTP.delete(options.url, options.params, options.headers).then(handleSuccess, handleError);
-				} else {
-					$log.error('HTTP: Unknown method: ' + options.method);
-					return $q.reject('Unknown method: ' + options.method);
 				}
-			} else {
-				return $http(options);
+
+				$log.error('HTTP: Unknown method: ' + options.method);
+				return $q.reject('Unknown method: ' + options.method);
 			}
+
+			// No cordovaHTTP, fall through to Angular
+			if (__DEVELOPMENT__) { $log.debug('Making Angular HTTP call with options:' + angular.toJson(options)); }
+			return $http(options);
 		});
 	};
 
-	var get = function(url, options) {
+	var httpQueue = Queue.create({
+		name: 'HTTP',
+		maxRequests: 8
+	});
+
+	var queuedCall = function(options) {
+		return httpQueue.add(function queueAdd() {
+			return call(options);
+		});
+	};
+
+	var get = function(url, _options) {
+		var options = _options || {};
 		options.method = 'GET';
 		options.url = url;
-		return call(options);
+		return httpQueue.add(function callGet() {
+			return call(options);
+		});
 	};
 
-	var del = function(url, options) {
+	var del = function(url, _options) {
+		var options = _options || {};
 		options.method = 'DELETE';
 		options.url = url;
-		return call(options);
+		return httpQueue.add(function callDelete() {
+			return call(options);
+		});
 	};
 
-	var post = function(url, options) {
+	var post = function(url, _options) {
+		var options = _options || {};
 		options.method = 'POST';
 		options.url = url;
-		return call(options);
+		return httpQueue.add(function callPost() {
+			return call(options);
+		});
 	};
 
-	var put = function(url, options) {
+	var put = function(url, _options) {
+		var options = _options || {};
 		options.method = 'PUT';
 		options.url = url;
-		return call(options);
+		return httpQueue.add(function callPut() {
+			return call(options);
+		});
+	};
+
+	var createBasicAuthHeader = function(username, password) {
+		return 'Basic ' + $window.btoa(username + ':' + password);
+	};
+
+	var getBasicAuth = function() {
+		return basicAuth;
 	};
 
 	var useBasicAuth = function(username, password) {
-		if (!ready) {
-			ready = initialize();
-		}
-		return ready.then(function(cordovaHTTP) {
-			if (cordovaHTTP) {
-				cordovaHTTP.useBasicAuth(username, password);
+		basicAuth = null;
+
+		if (username) {
+			basicAuth = {
+				username: username,
+				password: password
+			};
+
+			if (typeof username === 'object' && !password) {
+				basicAuth = username;
 			}
-		});
+
+			if (basicAuth.username && basicAuth.password) {
+				basicAuth.header = createBasicAuthHeader(basicAuth.username, basicAuth.password);
+				$http.defaults.headers.common.Authorization = basicAuth.header;
+			}
+		} else {
+			delete $http.defaults.headers.common.Authorization;
+		}
+
+		return $q.when(basicAuth);
 	};
 
 	return {
@@ -218,7 +274,10 @@ module.factory('HTTP', function($http, $injector, $log, $q, $window) {
 		del: del,
 		post: post,
 		put: put,
-		call: call,
+		call: queuedCall,
+		callImmediately: call,
+		createBasicAuthHeader: createBasicAuthHeader,
+		getBasicAuth: getBasicAuth,
 		useBasicAuth: useBasicAuth
 	};
 });

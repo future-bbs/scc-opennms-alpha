@@ -3,22 +3,35 @@
 
 	var angular = require('angular'),
 		moment = require('moment'),
-		Backshift = require('backshift/dist/backshift.onms'),
 		$ = require('jquery');
+
+	var Constants = require('../misc/Constants'),
+		TOP_POSITION = 0,
+		DEFAULT_PAUSE = 500;
+
+	require('angular-debounce');
 
 	require('./NodeService');
 	require('./ResourceService');
 
 	require('../settings/SettingsService');
 
-	var nodeResourceTemplate = require('ngtemplate!html!./node-resource.html');
+	require('../misc/Capabilities');
+	require('../misc/OnmsGraph');
+	require('../misc/util');
+
+	var nodeResourceTemplate = require('ngtemplate!./node-resource.html');
 
 	angular.module('opennms.controllers.NodeResource', [
 		'ionic',
 		'angularLocalStorage',
+		'rt.debounce',
+		'opennms.misc.OnmsGraph',
+		'opennms.services.Capabilities',
 		'opennms.services.Nodes',
 		'opennms.services.Resources',
-		'opennms.services.Settings' // for default-graph-min-range
+		'opennms.services.Settings', // for default-graph-min-range
+		'opennms.services.Util'
 	])
 	.config(function($stateProvider) {
 		$stateProvider
@@ -28,36 +41,44 @@
 			controller: 'NodeResourceCtrl'
 		});
 	})
-	.controller('NodeResourceCtrl', function($q, $scope, $injector, $log, $timeout, $ionicScrollDelegate, $window, NodeService, ResourceService) {
+	.controller('NodeResourceCtrl', function($q, $scope, $injector, $log, $timeout, $ionicScrollDelegate, $window, Capabilities, debounce, NodeService, ResourceService, util) {
 		$log.info('NodeResourceCtrl: initializing.');
+		$scope.util = util;
+		$scope.shouldRender = false;
+		$scope.ready = {};
+		$scope.graphBarHeight = 300;
 
 		var defaultRange = $injector.get('default-graph-range');
+		//var defaultRange = 60 * 60 * 1000;
 
+		/* eslint-disable no-magic-numbers */
 		var findElementById = function(id) {
 			var elm, scrollEl, position = 0;
 			elm = document.getElementById(id);
 			if (elm) {
-					scrollEl = angular.element(elm);
-					while (scrollEl) {
-							if (scrollEl.hasClass('scroll-content')) {
-									break;
-							}
-							var offsetTop = scrollEl[0].offsetTop,
-									scrollTop = scrollEl[0].scrollTop,
-									clientTop = scrollEl[0].clientTop;
-							position += offsetTop - scrollTop + clientTop;
-							scrollEl = scrollEl.parent();
+				scrollEl = angular.element(elm);
+				while (scrollEl) {
+					if (scrollEl.hasClass('scroll-content')) {
+						break;
 					}
-					$log.debug('offset='+position);
-					if (position < 10) {
-							return 0;
-					}
-					return position;
-			} else {
-					$log.error('can\'t find element ' + id);
+					var offsetTop = scrollEl[0].offsetTop,
+						scrollTop = scrollEl[0].scrollTop,
+						clientTop = scrollEl[0].clientTop;
+					position += offsetTop - scrollTop + clientTop;
+					scrollEl = scrollEl.parent();
+				}
+				$log.debug('offset='+position);
+				if (position < 10) {
 					return 0;
+				}
+
+				return position;
 			}
+
+			$log.error('can\'t find element ' + id);
+			return 0;
 		};
+		/* eslint-enable no-magic-numbers */
 
 		$scope.favorites = {};
 		$scope.range = {
@@ -66,38 +87,21 @@
 		$scope.range.start = new Date($scope.range.end.getTime() - defaultRange);
 
 		$scope.getId = function(graph) {
-			return 'graph-' + encodeURIComponent(graph.name);
+			return graph && graph.name? 'graph-' + encodeURIComponent(graph.name):undefined;
 		};
 
-		$scope.display = {};
-
-		$scope.calculateHeight = function(graph) {
-			$scope.shouldDisplay(graph);
-			return $scope.width + 80;
-		};
-
-		$scope.shouldDisplay = function(graph) {
-			if (graph && graph.name) {
-				var id = 'graph-' + graph.name;
-				var el = $(document.getElementById(id));
-				var visible = el.visible(true);
-				if ($scope.display[id] !== visible) {
-					$log.debug(graph.name + ': ' + $scope.display[id] + ' -> ' + visible);
-				}
-				$scope.display[id] = visible;
-			}
-			return true;
-		};
-
-		$scope.refresh = function() {
+		$scope.refreshGraphs = function() {
 			$log.debug('refreshing: ' + $scope.resourceId);
+			var promises = [];
 			if ($scope.nodeId) {
-				NodeService.get($scope.nodeId).then(function(node) {
+				promises.push(NodeService.get($scope.nodeId).then(function(node) {
 					$scope.node = node;
-				});
+				}));
+			} else {
+				$log.warn('warning: no node ID!');
 			}
 			if ($scope.resourceId) {
-				ResourceService.favorites().then(function(favorites) {
+				promises.push(ResourceService.favorites().then(function(favorites) {
 					var favorite,
 						scopeFavorites = {};
 
@@ -107,32 +111,37 @@
 							scopeFavorites[favorite.graphName] = favorite;
 						}
 					}
-					$log.debug('got favorites: ' + angular.toJson(scopeFavorites));
+					if (__DEVELOPMENT__) { $log.debug('got favorites: ' + angular.toJson(scopeFavorites)); }
 					$scope.favorites = scopeFavorites;
-				});
-				ResourceService.graphNames($scope.resourceId).then(function(graphs) {
-					var promises = [];
+					return scopeFavorites;
+				}));
+				promises.push(ResourceService.graphNames($scope.resourceId).then(function(graphs) {
+					var p = [];
 					for (var i=0, len=graphs.length; i < len; i++) {
-						promises.push(ResourceService.graph(graphs[i]));
+						p.push(ResourceService.graph(graphs[i]));
 					}
-					$q.all(promises).then(function(graphDefs) {
+					$scope.ready = {};
+					return $q.all(p).then(function(graphDefs) {
 						$scope.graphDefinitions = graphDefs;
-						if (graphDefs && graphDefs.length && graphDefs.length > 0) {
+						if (graphDefs && graphDefs.length && graphDefs.length > 0) { // eslint-disable-line no-magic-numbers
 							$scope.shown = graphDefs[0];
 						}
 					});
-				});
-				ResourceService.resource($scope.resourceId).then(function(ret) {
+				}));
+				promises.push(ResourceService.resource($scope.resourceId).then(function(ret) {
 					if (ret.children && ret.children.resource) {
 						$scope.children = ResourceService.withDividers(ret.children.resource);
 					}
 					$scope.resource = ret;
-				}).finally(function() {
-					$scope.$broadcast('scroll.refreshComplete');
-				});
+				}));
 			} else {
-				$scope.$broadcast('scroll.refreshComplete');
+				$log.warn('warning: no resource ID!');
 			}
+			return $q.all(promises).then(function() {
+				$scope.$broadcast('opennms.refreshGraphs');
+			}).finally(function() {
+				$scope.$broadcast('scroll.refreshComplete');
+			});
 		};
 
 		$scope.isFavorite = function(graphName) {
@@ -159,29 +168,59 @@
 
 		$scope.toggleOpen = function(graph) {
 			if ($scope.shown && $scope.shown.name && graph && graph.name && $scope.shown.name === graph.name) {
-				//$log.debug('hiding: ' + angular.toJson(graph));
+				//if (__DEVELOPMENT__) { $log.debug('hiding: ' + angular.toJson(graph)); }
 				delete $scope.shown;
 			} else {
-				//$log.debug('showing: ' + angular.toJson(graph));
+				//if (__DEVELOPMENT__) { $log.debug('showing: ' + angular.toJson(graph)); }
 				$scope.shown = graph;
 				$timeout(function() {
 					$scope.$broadcast('scroll.refreshComplete');
 					var position = findElementById('graph-' + graph.name);
 					$log.debug('Found element position: ' + position);
-					$ionicScrollDelegate.$getByHandle('node-resources-scroll').scrollTo(0, position, true);
-				}, 500);
+					$ionicScrollDelegate.$getByHandle('node-resources-scroll').scrollTo(TOP_POSITION, position, true);
+				}, DEFAULT_PAUSE);
 			}
 		};
 
-		var resetModel = function() {
+		var resetData = function() {
 			$scope.graphDefinitions = [];
 			$scope.children = [];
 			$scope.node = {};
 		};
 
+		$scope.$on('opennms.graph.rendered', function(ev, info) {
+			$scope.ready[info.graph.name]++;
+
+			var ready = Object.keys($scope.ready).sort();
+			var graphs = $scope.graphDefinitions.map(function(def) {
+				return def.name;
+			}).sort();
+
+			var gdlen = $scope.graphDefinitions.length;
+			var difference = ready.difference(graphs);
+
+			if (gdlen > 0 && difference.length === 0) { // eslint-disable-line no-magic-numbers
+				if ($scope.shouldRender === false) {
+					$scope.shouldRender = true;
+					$scope.$broadcast('opennms.refreshGraphs');
+				}
+			} else {
+				$scope.shouldRender = false;
+			}
+		});
+
+		var delayedRefresh = debounce(DEFAULT_PAUSE, $scope.refreshGraphs);
+		util.onInfoUpdated(delayedRefresh);
+		util.onDefaultServerUpdated(delayedRefresh);
+
+		util.onLowMemory('node-resource', function(currentView) {
+			$log.debug('NodeResourceCtrl: resetting data because of low memory.');
+			resetData();
+		});
+
+		var lazyReset;
 		$scope.$on('$ionicView.beforeEnter', function(ev, info) {
-			$log.info('NodeResourceCtrl: entering node view.');
-			//$log.debug('info=' + angular.toJson(info));
+			$timeout.cancel(lazyReset);
 			if (info && info.stateParams) {
 				if (info.stateParams.node) {
 					var nodeId = parseInt(info.stateParams.node, 10);
@@ -194,18 +233,17 @@
 			} else {
 				$log.error('NodeResourcesCtrl: unable to determine node or resource from view.');
 			}
-			if (info && info.direction === 'forward') {
-				$scope.refresh();
-			}
+			$scope.refreshGraphs();
 		});
-
 		$scope.$on('$ionicView.afterLeave', function(ev, info) {
-			$log.debug('info=' + angular.toJson(info));
-			if (info && info.direction === 'forward') {
-				// we're going deeper, keep the model in memory
-			} else if (info) {
-				$log.debug('NodeResourceCtrl: leaving node resource view; cleaning up.');
-				resetModel();
+			if (Capabilities.lowMemory()) {
+				resetData();
+			} else {
+				lazyReset = $timeout(function() {
+					if (__DEVELOPMENT__) { $log.debug('ResourceController.afterLeave: info=' + angular.toJson(info)); }
+					$log.debug('NodeResourceCtrl: leaving node resource view; cleaning up.');
+					resetData();
+				}, Constants.DEFAULT_TIMEOUT);
 			}
 		});
 	});

@@ -1,7 +1,15 @@
-/* jshint -W069 */ /* "better written in dot notation" */
+'use strict';
 
 var MonitoredService = require('./MonitoredService'),
   moment = require('moment');
+
+var nullSafe = function(str) {
+  if (str && str.trim() !== '') {
+    return str;
+  }
+
+  return undefined;
+};
 
 /**
  * @ngdoc object
@@ -10,16 +18,7 @@ var MonitoredService = require('./MonitoredService'),
  * @constructor
  */
 function Node(node) {
-  'use strict';
-
   var self = this;
-  var nullSafe = function(str) {
-    if (str && str.trim() !== '') {
-      return str;
-    } else {
-      return undefined;
-    }
-  };
 
   /**
    * @description
@@ -28,7 +27,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {number} The unique node ID
    */
-  self.id = parseInt(node['_id'], 10);
+  self.id = parseInt(node._id, 10);
 
   /**
    * @description
@@ -37,7 +36,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {string} The node's foreign source
    */
-  self.foreignSource = nullSafe(node['_foreignSource']);
+  self.foreignSource = nullSafe(node._foreignSource);
 
   /**
    * @description
@@ -46,7 +45,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {string} The node's foreignId field
    */
-  self.foreignId = nullSafe(node['_foreignId']);
+  self.foreignId = nullSafe(node._foreignId);
 
   /**
    * @description
@@ -55,7 +54,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {string} The node's label
    */
-  self.label = node['_label'];
+  self.label = node._label;
 
   /**
    * @description
@@ -64,7 +63,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {string} The node's type
    */
-  self.type = node['_type'];
+  self.type = node._type;
 
   /**
    * @description
@@ -73,7 +72,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {string} The source of the node's label
    */
-  self.labelSource = node['labelSource'];
+  self.labelSource = node.labelSource;
 
   /**
    * @description
@@ -82,7 +81,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {object} The node's assets
    */
-  self.assets = node['assetRecord'];
+  self.assets = node.assetRecord;
 
   if (self.assets) {
     if (!self.isEmpty_(self.assets.lastModifiedDate)) {
@@ -112,7 +111,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {array} The node's list of categories
    */
-  self.categories = node['categories'];
+  self.categories = node.categories;
   if (self.categories && !angular.isArray(self.categories)) {
     self.categories = [self.categories];
   }
@@ -132,7 +131,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {moment} The node's creation time
    */
-  self.createTime = moment(node['createTime']);
+  self.createTime = moment(node.createTime);
 
   /**
    * @description
@@ -141,7 +140,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {string} The last time the node was scanned by Capsd
    */
-  self.lastCapsdPoll = moment(node['lastCapsdPoll']);
+  self.lastCapsdPoll = moment(node.lastCapsdPoll);
 
   /**
    * @description
@@ -150,7 +149,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {string} The node's sysContact field
    */
-  self.sysContact = nullSafe(node['sysContact']);
+  self.sysContact = nullSafe(node.sysContact);
 
   /**
    * @description
@@ -159,7 +158,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {string} The node's sysDescription field
    */
-  self.sysDescription = nullSafe(node['sysDescription']);
+  self.sysDescription = nullSafe(node.sysDescription);
 
   /**
    * @description
@@ -168,7 +167,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {string} The node's sysLocation field
    */
-  self.sysLocation = nullSafe(node['sysLocation']);
+  self.sysLocation = nullSafe(node.sysLocation);
 
   /**
    * @description
@@ -177,7 +176,7 @@ function Node(node) {
    * @propertyOf Node
    * @returns {string} The node's sysName field
    */
-  self.sysName = nullSafe(node['sysName']);
+  self.sysName = nullSafe(node.sysName);
 
   /**
    * @description
@@ -186,11 +185,10 @@ function Node(node) {
    * @propertyOf Node
    * @returns {string} The node's sysObjectId field
    */
-  self.sysObjectId = nullSafe(node['sysObjectId']);
+  self.sysObjectId = nullSafe(node.sysObjectId);
 }
 
 Node.prototype.getDisplayId = function() {
-  'use strict';
   var self = this;
   var ret;
 
@@ -204,16 +202,10 @@ Node.prototype.getDisplayId = function() {
 };
 
 Node.prototype.isEmpty_ = function(str) {
-  'use strict';
-  if (str && str !== '') {
-    return false;
-  } else {
-    return true;
-  }
+  return !str || str === '';
 };
 
 Node.prototype.getAddress = function() {
-  'use strict';
   var assets, prop, ret,
     self = this;
 
@@ -241,6 +233,36 @@ Node.prototype.getAddress = function() {
     }
   }
   return undefined;
+};
+
+Node.prototype.toJSON = function() {
+  var ret = {
+    _id: this.id,
+    _foreignSource: this.foreignSource,
+    _foreignId: this.foreignId,
+    _label: this.label,
+    _type: this.type,
+    labelSource: this.labelSource,
+    assetRecord: this.assets,
+    createTime: this.createTime,
+    lastCapsdPoll: this.lastCapsdPoll,
+    sysContact: this.sysContact,
+    sysDescription: this.sysDescription,
+    sysLocation: this.sysLocation,
+    sysName: this.sysName,
+    sysObjectId: this.sysObjectId
+  };
+
+  if (this.categories) {
+    ret.categories = this.categories.map(function(cat) {
+      return {
+        _id: cat.id,
+        _name: cat.name
+      };
+    });
+  }
+
+  return ret;
 };
 
 module.exports = Node;

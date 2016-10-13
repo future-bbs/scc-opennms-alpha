@@ -1,6 +1,6 @@
 /*! angular-highlightjs
-version: 0.5.1
-build date: 2015-11-08
+version: 0.6.2
+build date: 2016-08-19
 author: Chih-Hsuan Fan
 https://github.com/pc035860/angular-highlightjs.git */
 
@@ -15,6 +15,37 @@ https://github.com/pc035860/angular-highlightjs.git */
 }(this, function (angular, hljs) {
 
 /*global angular, hljs*/
+
+/**
+ * returns a function to transform attrs to supported ones
+ *
+ * escape:
+ *   hljs-escape or escape
+ * no-escape:
+ *   hljs-no-escape or no-escape
+ * onhighlight:
+ *   hljs-onhighlight or onhighlight
+ */
+function attrGetter(attrs) {
+  return function (name) {
+    switch (name) {
+      case 'escape':
+        return angular.isDefined(attrs.hljsEscape) ?
+          attrs.hljsEscape :
+          attrs.escape;
+
+      case 'no-escape':
+        return angular.isDefined(attrs.hljsNoEscape) ?
+          attrs.hljsNoEscape :
+          attrs.noEscape;
+
+      case 'onhighlight':
+        return angular.isDefined(attrs.hljsOnhighlight) ?
+          attrs.hljsOnhighlight :
+          attrs.onhighlight;
+    }
+  };
+}
 
 function shouldHighlightStatics(attrs) {
   var should = true;
@@ -60,8 +91,8 @@ ngModule.factory('hljsCache', ["$cacheFactory", function ($cacheFactory) {
 /**
  * HljsCtrl controller
  */
-ngModule.controller('HljsCtrl', 
-["hljsCache", "hljsService", "$interpolate", "$window", "$log", function HljsCtrl (hljsCache, hljsService, $interpolate, $window, $log) {
+ngModule.controller('HljsCtrl',
+["hljsCache", "hljsService", "$interpolate", "$window", function HljsCtrl (hljsCache, hljsService, $interpolate, $window) {
   var ctrl = this;
 
   var _elm = null,
@@ -150,6 +181,7 @@ ngModule.controller('HljsCtrl',
           _elm.html(newVal);
         }
       });
+      _interpolateScope.$apply();
       _elm.html(interpolateFn(_interpolateScope));
     }
     else {
@@ -273,17 +305,19 @@ hljsDir = /*@ngInject*/ ["$parse", function ($parse) {
       return function postLink(scope, iElm, iAttrs, ctrl) {
         var escapeCheck;
 
-        if (angular.isDefined(iAttrs.escape)) {
-          escapeCheck = $parse(iAttrs.escape);
-        } else if (angular.isDefined(iAttrs.noEscape)) {
+        var attrs = attrGetter(iAttrs);
+
+        if (angular.isDefined(attrs('escape'))) {
+          escapeCheck = $parse(attrs('escape'));
+        } else if (angular.isDefined(attrs('no-escape'))) {
           escapeCheck = $parse('false');
         }
 
         ctrl.init(iElm.find('code'));
 
-        if (iAttrs.onhighlight) {
+        if (attrs('onhighlight')) {
           ctrl.highlightCallback(function () {
-            scope.$eval(iAttrs.onhighlight);
+            scope.$eval(attrs('onhighlight'));
           });
         }
 

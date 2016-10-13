@@ -1,6 +1,8 @@
-/* jshint -W069 */ /* "better written in dot notation" */
+'use strict';
 
-var moment = require('moment');
+var angular = require('angular'),
+  md5 = require('js-md5'),
+  moment = require('moment');
 
 /**
  * @ngdoc object
@@ -9,8 +11,6 @@ var moment = require('moment');
  * @constructor
  */
 function MonitoredService(svc) {
-  'use strict';
-
   var self = this;
 
   /**
@@ -20,16 +20,16 @@ function MonitoredService(svc) {
    * @propertyOf MonitoredService
    * @returns {number} The unique service ID
    */
-  self.id = svc['_id'];
+  self.id = svc._id;
 
   /**
    * @description
    * @ngdoc property
-   * @name MonitoredService#ipINterfaceId
+   * @name MonitoredService#ipInterfaceId
    * @propertyOf MonitoredService
    * @returns {number} The unique ID of the IP interface this monitored service is associated with.
    */
-  self.ipInterfaceId = svc['ipInterfaceId'];
+  self.ipInterfaceId = svc.ipInterfaceId;
 
   /**
    * @description
@@ -38,7 +38,7 @@ function MonitoredService(svc) {
    * @propertyOf MonitoredService
    * @returns {number} The unique ID of the service type this monitored service is of.
    */
-  self.serviceId = svc['serviceType']['_id'];
+  self.serviceId = svc.serviceType._id;
 
   /**
    * @description
@@ -47,7 +47,7 @@ function MonitoredService(svc) {
    * @propertyOf MonitoredService
    * @returns {string} The human-readable name of the service type this monitored service is of.
    */
-  self.serviceName = svc['serviceType']['name'];
+  self.serviceName = svc.serviceType.name;
 
   /**
    * @description
@@ -56,7 +56,26 @@ function MonitoredService(svc) {
    * @propertyOf MonitoredService
    * @returns {*} the monitored service status.
    */
-  self.status = svc['_status'];
+  self.status = svc._status;
+
+  self.hash = md5([self.id, self.ipInterfaceId, self.serviceId, self.serviceName, self.status].join('|'));
 }
+
+MonitoredService.prototype.toJSON = function() {
+  var ret = {
+    _id: this.id,
+    ipInterfaceId: this.ipInterfaceId,
+    _status: this.status
+  };
+
+  if (this.serviceId || this.serviceName) {
+    ret.serviceType = {
+      _id: this.serviceId,
+      name: this.serviceName
+    };
+  }
+
+  return ret;
+};
 
 module.exports = MonitoredService;

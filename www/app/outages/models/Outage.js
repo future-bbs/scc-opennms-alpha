@@ -1,8 +1,10 @@
-/* jshint -W069 */ /* "better written in dot notation" */
+'use strict';
 
 var MonitoredService = require('../../nodes/models/MonitoredService'),
   moment = require('moment'),
-  OnmsEvent = require('../../events/models/Event');
+  OnmsEvent = require('../../events/models/OnmsEvent'),
+  md5 = require('js-md5'),
+  angular = require('angular');
 
 /**
  * @ngdoc object
@@ -11,8 +13,6 @@ var MonitoredService = require('../../nodes/models/MonitoredService'),
  * @constructor
  */
 function Outage(outage) {
-  'use strict';
-
   var self = this;
 
   /**
@@ -22,7 +22,7 @@ function Outage(outage) {
    * @propertyOf Outage
    * @returns {number} The unique outage ID
    */
-  self.id = parseInt(outage['_id'], 10);
+  self.id = parseInt(outage._id, 10);
 
   /**
    * @description
@@ -31,7 +31,7 @@ function Outage(outage) {
    * @propertyOf Outage
    * @returns {string} IP Address of node's interface
    */
-  self.ipAddress = outage['ipAddress'];
+  self.ipAddress = outage.ipAddress;
 
   /**
    * @description
@@ -40,9 +40,9 @@ function Outage(outage) {
    * @propertyOf Outage
    * @returns {*|Date} The time the service was lost.
    */
-  self.ifLostService = moment(outage['_ifLostService']);
+  self.ifLostService = moment(outage._ifLostService);
 
-  if (outage['_ifRegainedService']) {
+  if (outage._ifRegainedService) {
     /**
      * @description
      * @ngdoc property
@@ -50,7 +50,7 @@ function Outage(outage) {
      * @propertyOf Outage
      * @returns {*|Date} The time the service was regained. Property is undefined if the service hasn't been regained.
      */
-    self.ifRegainedService = moment(outage['_ifRegainedService']);
+    self.ifRegainedService = moment(outage._ifRegainedService);
   }
 
   /**
@@ -60,7 +60,7 @@ function Outage(outage) {
    * @propertyOf Outage
    * @returns {MonitoredService} The monitored service related to this outage.
    */
-  self.monitoredService = new MonitoredService(outage['monitoredService']);
+  self.monitoredService = new MonitoredService(outage.monitoredService);
 
   /**
    * @description
@@ -69,7 +69,7 @@ function Outage(outage) {
    * @propertyOf Outage
    * @returns {Event} The event that was emitted when the service was lost.
    */
-  self.serviceLostEvent = new OnmsEvent(outage['serviceLostEvent']);
+  self.serviceLostEvent = new OnmsEvent(outage.serviceLostEvent);
   //self.node = new Node(self.nodeId);
 
   /**
@@ -90,36 +90,49 @@ function Outage(outage) {
    */
   self.nodeLabel = self.serviceLostEvent.nodeLabel;
 
-  /**
-   * @description Helper method to get a friendly node label. It will generate
-   *              a node label based on the node ID if the nodeLabel property
-   *              is not defined or is empty.
-   * @ngdoc method
-   * @name Outage#getNodeName
-   * @methodOf Outage
-   * @returns {string} a formatted node label using the nodeLabel or the nodeId formatted into a string.
-   */
-  self.getNodeName = function() {
-    if (self.nodeLabel === undefined || self.nodeLabel === '') {
-      return 'Node ' + self.nodeId;
-    } else {
-      return self.nodeLabel;
-    }
-  };
-
-  /**
-   * @description Provides a formatted severity CSS class
-   * @ngdoc method
-   * @name Outage#getSeverityClass
-   * @methodOf Outage
-   * @returns {string} formatted CSS class name
-   */
-  self.getSeverityClass = function() {
-    if (this.serviceLostEvent.severity !== null && angular.isString(this.serviceLostEvent.severity) && this.serviceLostEvent.severity.length !== 0) {
-      return 'severity-'+angular.uppercase(this.serviceLostEvent.severity);
-    }
-    return '';
-  };
+  self.hash = md5([self.id, self.ipAddress, self.ifLostService, self.ifRegainedService, self.monitoredService.hash, self.serviceLostEvent.hash].join('|'));
 }
+
+/**
+ * @description Helper method to get a friendly node label. It will generate
+ *              a node label based on the node ID if the nodeLabel property
+ *              is not defined or is empty.
+ * @ngdoc method
+ * @name Outage#getNodeName
+ * @methodOf Outage
+ * @returns {string} a formatted node label using the nodeLabel or the nodeId formatted into a string.
+ */
+Outage.prototype.getNodeName = function() {
+  if (this.nodeLabel === undefined || this.nodeLabel === '') {
+    return 'Node ' + this.nodeId;
+  }
+
+  return this.nodeLabel;
+};
+
+/**
+ * @description Provides a formatted severity CSS class
+ * @ngdoc method
+ * @name Outage#getSeverityClass
+ * @methodOf Outage
+ * @returns {string} formatted CSS class name
+ */
+Outage.prototype.getSeverityClass = function() {
+  if (this.serviceLostEvent.severity !== null && angular.isString(this.serviceLostEvent.severity) && this.serviceLostEvent.severity.length !== 0) { // eslint-disable-line no-magic-numbers
+    return 'severity-'+angular.uppercase(this.serviceLostEvent.severity);
+  }
+  return '';
+};
+
+Outage.prototype.toJSON = function() {
+  return {
+    _id: this.id,
+    ipAddress: this.ipAddress,
+    _ifLostService: this.ifLostService,
+    _ifRegainedService: this.ifRegainedService,
+    monitoredService: this.monitoredService,
+    serviceLostEvent: this.serviceLostEvent
+  };
+};
 
 module.exports = Outage;

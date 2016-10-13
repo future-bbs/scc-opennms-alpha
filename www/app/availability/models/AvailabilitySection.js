@@ -1,7 +1,8 @@
-/* jshint -W069 */ /* "better written in dot notation" */
+'use strict';
 
-var AvailabilityCategory = require('./AvailabilityCategory'),
-  moment = require('moment');
+var AvailabilityCategory = require('./AvailabilityCategory');
+var moment = require('moment');
+var md5 = require('js-md5');
 
 /**
  * @ngdoc object
@@ -10,8 +11,6 @@ var AvailabilityCategory = require('./AvailabilityCategory'),
  * @constructor
  */
 function AvailabilitySection(section) {
-  'use strict';
-
   var self = this;
 
   /**
@@ -21,7 +20,7 @@ function AvailabilitySection(section) {
    * @propertyOf AvailabilitySection
    * @returns {string} Section name
    */
-  self.name   = section['_name'];
+  self.name   = section._name;
 
   /**
    * @description
@@ -31,15 +30,26 @@ function AvailabilitySection(section) {
    * @returns {array} An array of categories
    */
   self.categories = [];
-  if (section.categories && section.categories.category) {
-    if (!angular.isArray(section.categories.category)) {
-      section.categories.category = [section.categories.category];
+  if (section.categories) {
+    if (section.categories.category) {
+      if (!angular.isArray(section.categories.category)) {
+        section.categories.category = [section.categories.category];
+      }
+      section.categories = section.categories.category;
     }
-    for (var i=0, len=section.categories.category.length; i < len; i++) {
-      self.categories.push(new AvailabilityCategory(section.categories.category[i]));
+    for (var i=0, len=section.categories.length; i < len; i++) {
+      self.categories.push(new AvailabilityCategory(section.categories[i]));
     }
   }
-
 }
+
+AvailabilitySection.prototype.toJSON = function() {
+  return {
+    _name: this.name,
+    categories: {
+      category: this.categories
+    }
+  };
+};
 
 module.exports = AvailabilitySection;

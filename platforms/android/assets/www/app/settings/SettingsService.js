@@ -6,9 +6,12 @@
 	var angular = require('angular'),
 		moment = require('moment');
 
+	var Constants = require('../misc/Constants');
+
+	require('../../../generated/misc/BuildConfig');
+
 	require('../db/db');
 	require('../misc/Analytics');
-	require('../misc/BuildConfig');
 
 	angular.module('opennms.services.Settings', [
 		'angularLocalStorage',
@@ -16,37 +19,56 @@
 		'opennms.services.BuildConfig',
 		'opennms.services.DB'
 	])
-	.value('default-graph-min-range', 30 * 24 * 60 * 60 * 1000) // 1 month
-	.value('default-graph-range', 24 * 60 * 60 * 1000) // 1 day
+	.value('default-graph-min-range', Constants.DEFAULT_GRAPH_MIN_RANGE)
+	.value('default-graph-range', Constants.DEFAULT_GRAPH_RANGE)
 	.factory('Settings', function($q, $rootScope, $injector, $log, storage, db, uuid4) {
 		var $scope = $rootScope.$new();
 
-		var defaultRestLimit = 100;
-		var defaultRefreshInterval = 10000;
+		var defaultSettings = {
+			enableAnalytics: true
+		};
 
 		var settingsDB = db.get(DB_NAME);
-		settingsDB.createIndex({
-			index: {
-				fields: ['key']
-			}
-		});
-
-		var _get = function(key) {
-			return settingsDB.find({
-				selector: {key: key}
-			}).then(function(result) {
-				if (result && result.docs && result.docs.length === 1) {
-					return result.docs[0].value;
-				} else {
-					return null;
+		var getAllSettings = function() {
+			return db.all(DB_NAME).then(function(docs) {
+				return docs.filter(function(doc) {
+					return doc.setting;
+				});
+			}).then(function(docs) {
+				var ret = {};
+				for (var i=0, len=docs.length, doc; i < len; i++) {
+					doc = docs[i];
+					ret[doc._id] = doc.value;
 				}
-			}).catch(function(err) {
-				return null;
+				return ret;
 			});
 		};
 
+		var _get = function(key) {
+			return settingsDB.get(key).then(function(doc) {
+				return doc.value;
+			}).catch(function(err) {
+				if (err.status === Constants.HTTP_NOT_FOUND) {
+					return undefined;
+				}
+				return $q.reject(err);
+			});
+		};
+
+		var _set = function(key, value) {
+			return db.upsert(DB_NAME, {
+				_id: key,
+				setting: true,
+				value: value
+			});
+		};
+
+		var _remove = function(key) {
+			return db.remove(DB_NAME, key);
+		};
+
 		var isEmpty = function(v) {
-			return !!(angular.isUndefined(v) || v === '' || v === 'undefined' || v === null);
+			return Boolean(angular.isUndefined(v) || v === '' || v === 'undefined' || v === null);
 		};
 
 		var ready = $q.defer();
@@ -71,53 +93,20 @@
 			}
 			delete saveme.defaultServerId;
 
-			db.find({
-				selector: {name: {$gt: null}},
-				sort: ['key']
-			}).then(function(result) {
-				var entries = result.docs;
-				var existing = {};
-				for (var i=0, len=entries.length, entry; i < len; i++) {
-					entry = entries[i];
-					existing[entry.key] = entry;
+			var promises = [];
+			for (var key in saveme) {
+				if (saveme[key] === undefined) {
+					promises.push(_remove(key));
+				} else {
+					promises.push(_set(key, saveme[key]))
 				}
+			}
 
-				var newKeys = Object.keys(saveme),
-					existingKeys = Object.keys(existing),
-					deletedKeys = existingKeys.difference(newKeys);
-
-				$log.debug('Settings._saveSettings: setting: ' + newKeys);
-				$log.debug('Settings._saveSettings: deleting: ' + deletedKeys);
-
-				var operations = [];
-
-				for (var i=0, len=newKeys.length, key, entry; i < len; i++) {
-					key = newKeys[i];
-					if (key === 'defaultServerId') {
-						continue;
-					}
-
-					entry = saveme[key];
-					$log.debug('SettingsService: saving ' + angular.toJson(entry));
-					if (existing[key]) {
-						if (existing[key].value !== saveme[key].value) {
-							entry = angular.extend({}, existing[key], saveme[key]);
-							operations.push(settingsDB.put(entry));
-						} else {
-							$log.debug('SettingsService: * ' + key + ' has not changed');
-						}
-					} else {
-						operations.push(settingsDB.post(entry));
-					}
-				}
-				for (var i=0, len=deletedKeys.length, key; i < len; i++) {
-					key = deletedKeys[i];
-					operations.push(settingsDB.remove(existing[key]));
-				}
-
-				return $q.all(operations).then(function() {
-					return settings;
-				});
+			return $q.all(promises).then(function() {
+				return settings;
+			}).catch(function(err) {
+				$log.warn('Failed to save settings: ' + angular.toJson(err));
+				return $q.reject(err);
 			});
 		};
 
@@ -128,24 +117,24 @@
 		};
 
 		var _loadSettings = function() {
-			return settingsDB.find({
-				selector: {key: {$gt: null}},
-				sort: ['key']
-			}).then(function(result) {
-				var docs = result.docs;
-				var settings = {},
-					defaultServerId = storage.get('opennms.default-server-id');
-
-				for (var i=0, len=docs.length, doc; i < len; i++) {
-					doc = docs[i];
-					settings[doc.key] = doc.value;
+			return getAllSettings().then(function(settings) {
+				return settings;
+			}).catch(function(err) {
+				if (err.status === Constants.HTTP_NOT_FOUND) {
+					return angular.copy(defaultSettings);
 				}
+				return $q.reject(err);
+			}).then(function(settings) {
+				var defaultServerId = storage.get('opennms.default-server-id');
 
 				if (!isEmpty(defaultServerId)) {
 					settings.defaultServerId = defaultServerId;
 				}
+				if (settings.enableAnalytics === undefined || settings.enableAnalytics === null) {
+					settings.enableAnalytics = true;
+				}
 
-				$log.debug('Settings._loadSettings: ' + angular.toJson(settings));
+				if (__DEVELOPMENT__) { $log.debug('Settings._loadSettings: ' + angular.toJson(settings)); }
 				return settings;
 			});
 		};
@@ -156,10 +145,10 @@
 			}).then(function(settings) {
 				if (isEmpty(settings)) {
 					return $q.reject('No settings found.');
-				} else {
-					return settings;
 				}
-			}, function(err) {
+				return settings;
+			}).catch(function(err) {
+				$log.warn('Unable to get settings: ' + angular.toJson(err));
 				return {};
 			});
 		};
@@ -168,7 +157,7 @@
 			$log.info('Settings.init: Initializing.');
 
 			return db.all(DB_NAME).then(function(docs) {
-				if (docs.length > 0) {
+				if (docs.length > 0) {  //eslint-disable-line no-magic-numbers
 					return ready.resolve(true);
 				}
 
@@ -178,12 +167,16 @@
 					oldSettings.uuid = uuid4.generate();
 				}
 				if (!oldSettings.restLimit) {
-					oldSettings.restLimit = defaultRestLimit;
+					oldSettings.restLimit = Constants.DEFAULT_REST_LIMIT;
 				}
 				if (!oldSettings.refreshInterval) {
-					oldSettings.refreshInterval = defaultRefreshInterval;
+					oldSettings.refreshInterval = Constants.DEFAULT_REFRESH_INTERVAL;
+				}
+				if (!oldSettings.hasOwnProperty('enableAnalytics')) {
+					oldSettings.enableAnalytics = true;
 				}
 
+				var promises = [];
 				if (!isEmpty(oldSettings)) {
 					var keys = Object.keys(oldSettings);
 					for (var i=0, len=keys.length, key, value; i < len; i++) {
@@ -196,13 +189,20 @@
 									value = null;
 								}
 							}
-							settingsDB.post({key:key,value:value});
+							if (value !== undefined && value !== null) {
+								promises.push(_set(key, value));
+							}
 						}
 					}
 				}
-				storage.remove('opennms.settings');
 
-				return ready.resolve(true);
+				return $q.all(promises).catch(function(err) {
+					$log.warn('Failed to convert old settings: ' + angular.toJson(err));
+					return $q.reject(err);
+				}).finally(function() {
+					storage.remove('opennms.settings');
+					return ready.resolve(true);
+				});
 			});
 		};
 
@@ -211,7 +211,6 @@
 				return $q.reject('Settings.saveSettings: ERROR: no settings provided.');
 			}
 
-			var serverTypeMatch = new RegExp('^([Hh][Tt][Tt][Pp][Ss]?):');
 			var changedSettings = {};
 
 			if (isEmpty(settings.defaultServerId)) {
@@ -224,7 +223,11 @@
 				delete settings.password;
 			}
 
-			if (angular.isUndefined(settings.refreshInterval) || settings.refreshInterval === 'undefined') {
+			if (settings.enableAnalytics === undefined || settings.enableAnalytics === null) {
+				settings.enableAnalytics = true;
+			}
+
+			if (isEmpty(settings.refreshInterval) || settings.refreshInterval === 'undefined') {
 				settings.refreshInterval = undefined;
 			} else {
 				settings.refreshInterval =  parseInt(settings.refreshInterval, 10);
@@ -233,12 +236,10 @@
 				}
 			}
 
-			return getSettings().then(function(oldSettings) {
-				var newSettings = angular.copy(settings), prop;
-
-				if (!oldSettings) {
-					oldSettings = {};
-				}
+			return getSettings().then(function(_oldSettings) {
+				var oldSettings = _oldSettings || {},
+					newSettings = angular.copy(settings),
+					prop;
 
 				for (prop in newSettings) {
 					if (newSettings.hasOwnProperty(prop) && newSettings[prop] !== oldSettings[prop]) {
@@ -256,24 +257,28 @@
 					c = angular.toJson(changedSettings);
 
 				if (c === '{}') {
-					//$log.debug('Settings.saveSettings: settings are unchanged.');
-					return oldSettings;
-				} else {
-					$log.debug('Settings.saveSettings: settings have changed.  Updating.');
+					//if (__DEVELOPMENT__) { $log.debug('Settings.saveSettings: settings are unchanged.'); }
+ 					return oldSettings;
+ 				}
+
+				$log.debug('Settings.saveSettings: settings have changed.  Updating.');
+				if (__DEVELOPMENT__) {
+					/*
 					$log.debug('Settings.saveSettings: Old Settings: ' + o);
 					$log.debug('Settings.saveSettings: New Settings: ' + n);
-
-					return storeSettings(newSettings).then(function(stored) {
-						if (changedSettings.server) {
-							var match = serverTypeMatch.exec(changedSettings.server);
-							if (match && match.length > 0) {
-								$rootScope.$broadcast('opennms.analytics.trackEvent', 'settings', 'serverType', 'Server Type', match[0]);
-							}
-						}
-						$rootScope.$broadcast('opennms.settings.updated', newSettings, oldSettings, changedSettings);
-						return stored;
-					});
+					*/
+					$log.debug('Settings.saveSettings: Changed Settings: ' + angular.toJson(c));
 				}
+
+				return storeSettings(newSettings).then(function(stored) {
+					$rootScope.$broadcast('opennms.settings.updated', newSettings, oldSettings, changedSettings);
+					return stored;
+				}, function(err) {
+					$log.error('SettingsService.saveSettings: Failed to save settings: ' + angular.toJson(err));
+					if (err.message) {
+						$log.error(err.message);
+					}
+				});
 			});
 		};
 
@@ -284,17 +289,18 @@
 		};
 
 		var _setDefaultServerId = function(id) {
-			storage.set('opennms.default-server-id', id);
-			return $q.when(id);
+			return getSettings().then(function(settings) {
+				settings.defaultServerId = id;
+				return saveSettings(settings);
+			});
 		};
 
 		var _getRestLimit = function() {
 			return _get('restLimit').then(function(restLimit) {
-				if (angular.isUndefined(restLimit)) {
-					return defaultRestLimit;
-				} else {
-					return restLimit;
+				if (isEmpty(restLimit)) {
+					return Constants.DEFAULT_REST_LIMIT;
 				}
+				return restLimit;
 			});
 		};
 
@@ -310,13 +316,30 @@
 			return $q.when($injector.get('config.build.build'));
 		};
 
+		function _isAnalyticsEnabled() {
+			return _get('enableAnalytics');
+		}
+
+		function _enableAnalytics() {
+			return getSettings().then(function(settings) {
+				settings.enableAnalytics = true;
+				return saveSettings(settings);
+			});
+		}
+
+		function _disableAnalytics() {
+			return getSettings().then(function(settings) {
+				settings.enableAnalytics = false;
+				return saveSettings(settings);
+			});
+		}
+
 		var _refreshInterval = function() {
 			return _get('refreshInterval').then(function(refreshInterval) {
-				if (angular.isUndefined(refreshInterval)) {
+				if (isEmpty(refreshInterval)) {
 					return defaultRefreshInterval;
-				} else {
-					return refreshInterval;
 				}
+				return refreshInterval;
 			});
 		};
 
@@ -328,6 +351,9 @@
 			refreshInterval: _refreshInterval,
 			restLimit: _getRestLimit,
 			uuid: _uuid,
+			isAnalyticsEnabled: _isAnalyticsEnabled,
+			enableAnalytics: _enableAnalytics,
+			disableAnalytics: _disableAnalytics,
 			version: _version,
 			build: _build
 		};
